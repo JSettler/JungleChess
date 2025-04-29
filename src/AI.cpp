@@ -8,6 +8,7 @@
 #include <string>
 #include <functional> // Required for std::greater
 #include <vector> // Ensure vector is included
+#include <iomanip> // For std::fixed, std::setprecision
 
 // --- Helper Structure for Scored Moves (Defined in AI.h) ---
 
@@ -33,6 +34,10 @@ std::string indent(int depth, int maxDepth) {
 // Define static TT members
 std::vector<TTEntry> AI::transpositionTable;
 bool AI::ttInitialized = false;
+//vvv NEW vvv --- Define node counter --- vvv
+uint64_t AI::nodesSearched = 0;
+//^^^ NEW ^^^---------------------------^^^
+
 
 // Initialize TT
 void AI::initializeTT() {
@@ -42,9 +47,27 @@ void AI::initializeTT() {
          std::cout << "Transposition Table initialized (Size: " << TT_SIZE << " entries)." << std::endl;
     }
      for (TTEntry& entry : transpositionTable) {
-         entry.depth = -1; entry.key = 0;
+         entry.depth = -1; entry.key = 0; // Mark as invalid/empty
      }
+     // std::cout << "Transposition Table cleared for new search." << std::endl; // Debug
 }
+
+//vvv NEW vvv --- Calculate TT Utilization --- vvv
+double AI::getTTUtilization() {
+    if (!ttInitialized || TT_SIZE == 0) {
+        return 0.0;
+    }
+    size_t usedCount = 0;
+    for (const auto& entry : transpositionTable) {
+        // Consider an entry used if it has a valid key and depth
+        // (Checking depth might be sufficient if we clear depth correctly)
+        if (entry.depth != -1) { // Or check entry.key != 0
+            usedCount++;
+        }
+    }
+    return (static_cast<double>(usedCount) / TT_SIZE) * 100.0;
+}
+//^^^ NEW ^^^--------------------------------^^^
 
 
 // --- Alpha-Beta Recursive Helper Function ---
@@ -72,10 +95,20 @@ int AI::alphaBeta(GameState gameState, int depth, int maxDepth, int alpha, int b
     Player winner = gameState.checkWinner();
     if (winner == Player::PLAYER2) return Evaluation::WIN_SCORE + depth;
     if (winner == Player::PLAYER1) return -Evaluation::WIN_SCORE - depth;
-    if (depth == 0) return Evaluation::evaluateBoard(gameState);
+    if (depth == 0) {
+        //vvv NEW vvv --- Increment node count for leaf evaluation --- vvv
+        nodesSearched++;
+        //^^^ NEW ^^^------------------------------------------------^^^
+        return Evaluation::evaluateBoard(gameState);
+    }
     Player currentPlayer = gameState.getCurrentPlayer();
     std::vector<Move> legalMoves = gameState.getAllLegalMoves(currentPlayer);
     if (legalMoves.empty()) return isMaximizingPlayer ? (-Evaluation::WIN_SCORE - depth) : (Evaluation::WIN_SCORE + depth);
+
+    //vvv NEW vvv --- Increment node count for internal node --- vvv
+    nodesSearched++;
+    //^^^ NEW ^^^---------------------------------------------^^^
+
 
     // 2. Score and Sort Moves
     std::vector<ScoredMove> scoredMoves; scoredMoves.reserve(legalMoves.size());
@@ -113,7 +146,10 @@ int AI::alphaBeta(GameState gameState, int depth, int maxDepth, int alpha, int b
         // else if (bestScoreForNode >= beta) calculatedBound = TTBound::LOWER_BOUND; // Covered by break
         else calculatedBound = TTBound::EXACT;
 
-        ttEntry = {currentHash, depth, bestScoreForNode, calculatedBound, bestMoveForNode};
+        // Store result if depth is sufficient or entry is empty/shallower
+        if (ttEntry.depth <= depth) {
+             ttEntry = {currentHash, depth, bestScoreForNode, calculatedBound, bestMoveForNode};
+        }
         return bestScoreForNode;
 
     } else { // Opponent Minimize
@@ -131,15 +167,21 @@ int AI::alphaBeta(GameState gameState, int depth, int maxDepth, int alpha, int b
          // else if (bestScoreForNode <= alpha) calculatedBound = TTBound::UPPER_BOUND; // Covered by break
          else calculatedBound = TTBound::EXACT;
 
-        ttEntry = {currentHash, depth, bestScoreForNode, calculatedBound, bestMoveForNode};
+        // Store result if depth is sufficient or entry is empty/shallower
+        if (ttEntry.depth <= depth) {
+            ttEntry = {currentHash, depth, bestScoreForNode, calculatedBound, bestMoveForNode};
+        }
         return bestScoreForNode;
     }
 }
 
 
 // --- Main AI Function: Uses Alpha-Beta ---
-Move AI::getBestMove(const GameState& currentGameState, int searchDepth, bool debugMode, bool quietMode) {
+//vvv MODIFIED vvv --- Return AIMoveInfo --- vvv
+AIMoveInfo AI::getBestMove(const GameState& currentGameState, int searchDepth, bool debugMode, bool quietMode) {
+//^^^ MODIFIED ^^^---------------------------^^^
     initializeTT(); // Clear/Initialize TT before search
+    nodesSearched = 0; // Reset node counter for this search
 
     Player aiPlayer = currentGameState.getCurrentPlayer();
     std::vector<Move> legalMoves = currentGameState.getAllLegalMoves(aiPlayer);
@@ -176,9 +218,12 @@ Move AI::getBestMove(const GameState& currentGameState, int searchDepth, bool de
             currentMoveScore = Evaluation::WIN_SCORE;
             if (!quietMode) std::cout << "  Found Immediate Winning Move (Den): (" << move.fromRow << "," << move.fromCol << ")->(" << move.toRow << "," << move.toCol << ")" << std::endl;
             bestMove = move; bestScore = currentMoveScore; // Update before returning
-            // Store TT entry for root?
-            // transpositionTable[currentGameState.getHashKey() % TT_SIZE] = {currentGameState.getHashKey(), searchDepth, currentMoveScore, TTBound::LOWER_BOUND, move};
-            return move; // Take immediate win
+            // Need to construct and return AIMoveInfo even for immediate win
+            AIMoveInfo result;
+            result.bestMove = bestMove;
+            result.nodesSearched = nodesSearched; // Nodes searched up to this point
+            result.ttUtilizationPercent = getTTUtilization(); // Get current utilization
+            return result;
         } else {
             nextState.switchPlayer();
             // Pass searchDepth parameter
@@ -216,10 +261,17 @@ Move AI::getBestMove(const GameState& currentGameState, int searchDepth, bool de
                   << " | Final Score: " << bestScore << std::endl;
     }
 
+    //vvv NEW vvv --- Construct and return result struct --- vvv
+    AIMoveInfo result;
+    result.bestMove = bestMove;
+    result.nodesSearched = nodesSearched;
+    result.ttUtilizationPercent = getTTUtilization(); // Calculate utilization after search completes
+    //^^^ NEW ^^^------------------------------------------^^^
+
     // Optional: Store the final best move in the TT for the root position
     // ...
 
-    return bestMove;
+    return result;
 }
 
 

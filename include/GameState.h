@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Common.h"
-#include "Hashing.h"
+#include "Hashing.h" // Include Zobrist hashing header
 #include <vector>
-#include <cstdint>
+#include <cstdint>   // For uint64_t
 
 class GameState {
 public:
@@ -14,11 +14,11 @@ public:
     // --- Core Game Actions & Information ---
     Piece getPiece(int row, int col) const;
     bool isMoveLegal(const Move& move, Player player) const;
-    void applyMove(const Move& move);
+    void applyMove(const Move& move); // Will update hash
     std::vector<Move> getAllLegalMoves(Player player) const;
     std::vector<Move> getLegalMovesForPiece(int fromRow, int fromCol) const;
     Player getCurrentPlayer() const;
-    void switchPlayer();
+    void switchPlayer(); // Will update hash
     Player checkWinner() const;
 
     // --- Hashing ---
@@ -29,12 +29,12 @@ public:
     bool isRiver(int r, int c) const;
     bool isOwnTrap(int r, int c, Player player) const;
     bool isOwnDen(int r, int c, Player player) const;
+    int getRank(PieceType type) const;
 
-    //vvv NEW vvv --- Setters needed for loading state --- vvv
+    // --- Setters needed for loading state ---
     void setBoard(const std::vector<std::vector<Piece>>& newBoard);
     void setCurrentPlayer(Player player);
     void setHashKey(uint64_t key); // Allow manually setting hash after loading board/player
-    //^^^ NEW ^^^-----------------------------------------^^^
 
 
 private:
@@ -44,9 +44,7 @@ private:
     uint64_t currentHashKey;
 
     // --- Private Helper Functions ---
-    int getRank(PieceType type) const;
     bool canCapture(const Piece& attacker, const Piece& defender, int defenderRow, int defenderCol) const;
     void updateHashForPieceChange(PieceType type, Player player, int r, int c);
 };
-
 

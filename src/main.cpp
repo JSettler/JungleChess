@@ -1,7 +1,8 @@
+// src/main.cpp (Part 1/2)
 #include <SFML/Graphics.hpp>
 #include "GameState.h"
 #include "Graphics.h"
-#include "AI.h" // Include AI.h to access AI::SEARCH_DEPTH
+#include "AI.h" // Include AI.h
 #include "Common.h"
 #include <iostream>
 #include <vector>
@@ -12,6 +13,7 @@
 #include <sstream>   // Required for std::to_string in window title
 #include <stdexcept> // For std::stoi exceptions
 #include <limits>    // For numeric_limits
+#include <iomanip>   // For std::fixed, std::setprecision
 
 // --- Forward Declarations for Save/Load ---
 bool saveGame(const std::vector<GameState>& history, const std::string& filename);
@@ -92,10 +94,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  <Shift+Backspace> : Redo last undone move.\n";
         std::cout << "  S                 : Save current game state to dsq-game.sav.\n";
         std::cout << "  L                 : Load game state from dsq-game.sav (clears undo/redo history).\n";
+        std::cout << "  P                 : Cycle piece display emphasis (Letters <-> Numbers).\n"; // Added P key
         std::cout << "  <Escape>          : Quit the game immediately.\n";
-        // Removed the explicit depth mention here as it's in Options now
-        // std::cout << "Other Info:\n";
-        // std::cout << "  Search depth is set at " << searchDepth << " plies.\n";
         return 0; // Exit after printing help
     }
     else if (unknownArgumentFound) {
@@ -115,12 +115,12 @@ int main(int argc, char* argv[]) {
 
 
     // --- Initialization ---
-    std::string windowTitle = "Jungle Chess - AlphaBeta AI (Depth " + std::to_string(searchDepth) + " + Undo/Redo)"; // Use variable depth
+    std::string windowTitle = "JungleChess  [depth = " + std::to_string(searchDepth) + "]"; // Use variable depth
     sf::RenderWindow window(sf::VideoMode(800, 700), windowTitle);
     window.setFramerateLimit(60);
 
     GameState gameState; // Current active game state
-    Graphics graphics;
+    Graphics graphics;   // Graphics object
     graphics.loadAssets();
     Player humanPlayer = Player::PLAYER1;
     Player aiPlayer = Player::PLAYER2;
@@ -203,6 +203,10 @@ int main(int argc, char* argv[]) {
                      if (!quietMode) std::cout << "Game state loaded from " << saveFilename << std::endl;
                 } else { /* Error printed in loadGame */ }
             }
+            // Handle Piece Display Toggle
+            else if (!gameOver && event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::P) {
+                graphics.togglePieceDisplay(); // Call the toggle method in Graphics object
+            }
             // Handle Human Player Input
             else if (!gameOver && gameState.getCurrentPlayer() == humanPlayer && event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
                 sf::Vector2i mousePos = sf::Mouse::getPosition(window);
@@ -245,6 +249,7 @@ int main(int argc, char* argv[]) {
             } // End Human Input
         } // End event loop
 
+
         // --- AI Turn Logic ---
         if (!gameOver && gameState.getCurrentPlayer() == aiPlayer) {
             std::vector<Move> aiLegalMovesCheck = gameState.getAllLegalMoves(aiPlayer);
@@ -253,16 +258,31 @@ int main(int argc, char* argv[]) {
                 if (!quietMode) std::cout << winReason << std::endl;
             } else {
                 auto startTime = std::chrono::high_resolution_clock::now();
-                // Pass searchDepth variable
-                Move aiMove = AI::getBestMove(gameState, searchDepth, debugMode, quietMode);
+                // Get AIMoveInfo struct
+                AIMoveInfo aiResult = AI::getBestMove(gameState, searchDepth, debugMode, quietMode);
                 auto stopTime = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime);
 
-                gameState.applyMove(aiMove); lastAiMove = aiMove; // Store move for highlight
-                if (!quietMode) std::cout << "AI calculation time: " << duration.count() << " ms" << std::endl; // Print time if not quiet
+                // Use move from result
+                gameState.applyMove(aiResult.bestMove);
+                lastAiMove = aiResult.bestMove; // Store move for highlight
+
+                // Print new stats
+                if (!quietMode) {
+                    double durationSeconds = duration.count() / 1000.0;
+                    double nodesPerSecond = (durationSeconds > 0.0001) ? (static_cast<double>(aiResult.nodesSearched) / durationSeconds) : 0.0; // Avoid division by zero
+
+                    std::cout << "AI calculation time: " << duration.count() << " ms | "
+                              << "Nodes: " << aiResult.nodesSearched << " | "
+                              << std::fixed << std::setprecision(0) << nodesPerSecond << " N/s | "
+                              << std::fixed << std::setprecision(1) << "TT Util: " << aiResult.ttUtilizationPercent << "%"
+                              << std::resetiosflags(std::ios::fixed) // Reset fixed flag for subsequent output
+                              << std::endl;
+                }
+
                 gameState.switchPlayer();
-                history.push_back(gameState); // Store state after AI move
-                redoHistory.clear(); // Clear redo history after new move
+                history.push_back(gameState);
+                redoHistory.clear();
             }
         } // End AI Turn
 
