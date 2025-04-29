@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
 
 
     // --- Initialization ---
-    std::string windowTitle = "JungleChess  [depth = " + std::to_string(searchDepth) + "]"; // Use variable depth
+    std::string windowTitle = "JungleChess v1.0   [depth = " + std::to_string(searchDepth) + "]"; // Use variable depth
     sf::RenderWindow window(sf::VideoMode(800, 700), windowTitle);
     window.setFramerateLimit(60);
 
