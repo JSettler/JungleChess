@@ -37,6 +37,8 @@ Contains an alpha-beta searcher with move-ordering, piece-square-tables, transpo
 
 [G] : start AI  (if it was its turn to move *or* at the start of the game/after setup)
 
+[R] : rotate the board by 180°
+
 
 (The computer plays red, from the bottom. The player always starts with blue.)
 

@@ -99,8 +99,9 @@ int main(int argc, char* argv[]) {
         std::cout << "  S                 : Save current game state to dsq-game.sav.\n";
         std::cout << "  L                 : Load game state from dsq-game.sav (clears undo/redo history).\n";
         std::cout << "  P                 : Cycle piece display emphasis (Letters <-> Numbers).\n";
-        std::cout << "  G                 : Make AI move (if it's AI's turn or start of game).\n"; // Updated help
-        std::cout << "  <Escape>          : Quit the game immediately.\n\n";
+        std::cout << "  G                 : Make AI move (if it's AI's turn or start of game).\n";
+        std::cout << "  R                 : Rotate board view 180 degrees.\n"; // Added R key help
+        std::cout << "  <Escape>          : Quit the game.\n\n";
         std::cout << "In-Game Keys (Setup Mode):\n"; // Added section
         std::cout << "  Left Click  : Place selected piece / Select UI button.\n";
         std::cout << "  Right Click : Remove piece from board square.\n";
@@ -108,7 +109,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  S           : Switch player side for piece placement.\n";
         std::cout << "  P           : Cycle piece display emphasis.\n";
         std::cout << "  F           : Finish setup and start game.\n";
-        std::cout << "  <Escape>    : Quit the game immediately.\n";
+        std::cout << "  R           : Rotate board view 180 degrees.\n"; // Added R key help
+        std::cout << "  <Escape>    : Quit the game.\n";
         return 0; // Exit after printing help
     }
     else if (unknownArgumentFound) {
@@ -128,9 +130,9 @@ int main(int argc, char* argv[]) {
 
 
     // --- Initialization ---
-    std::string windowTitle = "Jungle Chess - AlphaBeta AI (Depth " + std::to_string(searchDepth) + ")"; // Base title
+    std::string windowTitle = "JungleChess v1.0  [depth = " + std::to_string(searchDepth) + "]";
     if (currentMode == AppMode::SETUP) windowTitle += " - SETUP MODE";
-    else windowTitle += " + Undo/Redo";
+    // else windowTitle += " + Undo/Redo";
     sf::RenderWindow window(sf::VideoMode(800, 700), windowTitle);
     window.setFramerateLimit(60);
 
@@ -193,6 +195,11 @@ int main(int argc, char* argv[]) {
             if (event.type == sf::Event::KeyPressed) {
                 if (event.key.code == sf::Keyboard::Escape) { confirmingQuit = true; continue; }
                 if (event.key.code == sf::Keyboard::P) { graphics.togglePieceDisplay(); continue; }
+                if (event.key.code == sf::Keyboard::R) { // Handle 'R' key for rotation
+                    graphics.toggleBoardFlip();
+                    pieceSelected = false; selectedMove = {-1,-1,-1,-1}; selectedPieceLegalMoves.clear(); // Deselect on flip
+                    continue;
+                }
             }
 
             // --- Mode-Specific Event Handling ---

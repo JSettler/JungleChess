@@ -5,8 +5,9 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <cmath> // For std::floor
 
-//vvv RESTORED vvv --- Define Night Mode Colors --- vvv
+// Define Night Mode Colors
 namespace NightColors {
     const sf::Color Background = sf::Color(40, 40, 50);
     const sf::Color GridLine = sf::Color(100, 100, 110);
@@ -22,11 +23,10 @@ namespace NightColors {
     const sf::Color LegalMoveFill = sf::Color(0, 255, 0, 100);
     const sf::Color LastAiOutline = sf::Color(255, 0, 0, 200);
 }
-//^^^ RESTORED ^^^------------------------------------^^^
 
 
 // Constructor
-Graphics::Graphics() : pieceDisplayMode(0) {
+Graphics::Graphics() : pieceDisplayMode(0), boardFlipped(false) { // Initialize flags
     if (!font.loadFromFile("assets/arial.ttf")) {
          std::cerr << "Warning: Could not load default font 'assets/arial.ttf'." << std::endl;
     }
@@ -114,22 +114,32 @@ void Graphics::setupUIElements() {
     finishButton.bounds = finishButton.shape.getGlobalBounds();
 }
 
-// Convert mouse pixel coordinates
-//vvv RESTORED vvv --- Implementation for getClickedSquare --- vvv
+
+// Convert mouse pixel coordinates to board coordinates (Handles flip)
 sf::Vector2i Graphics::getClickedSquare(const sf::Vector2i& mousePos) const {
     float relativeX = static_cast<float>(mousePos.x) - BOARD_OFFSET_X;
     float relativeY = static_cast<float>(mousePos.y) - BOARD_OFFSET_Y;
-    // Check if click is within board bounds before dividing
+
     if (relativeX < 0 || relativeY < 0 ||
-        relativeX >= BOARD_COLS * SQUARE_SIZE || relativeY >= BOARD_ROWS * SQUARE_SIZE)
-    {
-        return sf::Vector2i(-1, -1); // Indicate click outside board
+        relativeX >= BOARD_COLS * SQUARE_SIZE || relativeY >= BOARD_ROWS * SQUARE_SIZE) {
+        return sf::Vector2i(-1, -1); // Click outside board bounds
     }
-    int col = static_cast<int>(relativeX / SQUARE_SIZE);
-    int row = static_cast<int>(relativeY / SQUARE_SIZE);
-    return sf::Vector2i(col, row);
+
+    // Calculate apparent row/col based on screen position
+    int apparentCol = static_cast<int>(std::floor(relativeX / SQUARE_SIZE));
+    int apparentRow = static_cast<int>(std::floor(relativeY / SQUARE_SIZE));
+
+    if (boardFlipped) {
+        // If board is flipped, translate apparent coords back to internal coords
+        int internalRow = BOARD_ROWS - 1 - apparentRow;
+        int internalCol = BOARD_COLS - 1 - apparentCol;
+        return sf::Vector2i(internalCol, internalRow);
+    } else {
+        // If not flipped, apparent coords are internal coords
+        return sf::Vector2i(apparentCol, apparentRow);
+    }
 }
-//^^^ RESTORED ^^^------------------------------------------^^^
+
 
 // Click detection for UI buttons
 PieceType Graphics::getClickedSetupPieceButton(const sf::Vector2i& mousePos) const {
@@ -166,6 +176,25 @@ void Graphics::togglePieceDisplay() {
     std::cout << "Piece display toggled to: " << modeStr << std::endl;
 }
 
+// Toggle board flip implementation
+void Graphics::toggleBoardFlip() {
+    boardFlipped = !boardFlipped;
+    std::cout << "Board orientation toggled. Player 1 is now at the "
+              << (boardFlipped ? "TOP" : "BOTTOM") << "." << std::endl;
+}
+
+// Helper to get screen position based on flip
+sf::Vector2f Graphics::getScreenPos(int r, int c) const {
+    int displayRow = r;
+    int displayCol = c;
+    if (boardFlipped) {
+        displayRow = BOARD_ROWS - 1 - r;
+        displayCol = BOARD_COLS - 1 - c;
+    }
+    return sf::Vector2f(BOARD_OFFSET_X + displayCol * SQUARE_SIZE,
+                        BOARD_OFFSET_Y + displayRow * SQUARE_SIZE);
+}
+
 
 // Main drawing function
 void Graphics::drawBoard(sf::RenderWindow& window,
@@ -176,10 +205,9 @@ void Graphics::drawBoard(sf::RenderWindow& window,
                          const std::vector<Move>& legalMoveHighlights,
                          int selectedRow, int selectedCol,
                          const Move& lastAiMove) {
-    window.clear(NightColors::Background); // Use restored namespace
+    window.clear(NightColors::Background);
     drawGrid(window, gameState);
     drawPieces(window, gameState);
-
     if (currentMode == AppMode::SETUP) {
         drawSetupUI(window, setupPlayer, selectedSetupPiece);
     } else {
@@ -189,14 +217,16 @@ void Graphics::drawBoard(sf::RenderWindow& window,
 
 // --- Private Helper Functions ---
 
-// Draw the grid lines
+// Draw the grid lines, coloring special squares (Uses getScreenPos)
 void Graphics::drawGrid(sf::RenderWindow& window, const GameState& gameState) {
     sf::RectangleShape square(sf::Vector2f(SQUARE_SIZE, SQUARE_SIZE));
-    square.setOutlineColor(NightColors::GridLine); // Use restored namespace
+    square.setOutlineColor(NightColors::GridLine);
     square.setOutlineThickness(1.0f);
+
     for (int r = 0; r < BOARD_ROWS; ++r) {
         for (int c = 0; c < BOARD_COLS; ++c) {
-            square.setPosition(BOARD_OFFSET_X + c * SQUARE_SIZE, BOARD_OFFSET_Y + r * SQUARE_SIZE);
+            square.setPosition(getScreenPos(r, c)); // Use helper function for position
+            // Color determination logic remains the same, based on internal (r, c)
             if (gameState.isRiver(r, c)) square.setFillColor(NightColors::Water);
             else if (gameState.isOwnDen(r, c, Player::PLAYER1)) square.setFillColor(NightColors::P1_Den);
             else if (gameState.isOwnDen(r, c, Player::PLAYER2)) square.setFillColor(NightColors::P2_Den);
@@ -208,10 +238,10 @@ void Graphics::drawGrid(sf::RenderWindow& window, const GameState& gameState) {
     }
 }
 
-// Draw the pieces
+
+// Draw the pieces onto the board (Handles 3 display modes, uses getScreenPos)
 void Graphics::drawPieces(sf::RenderWindow& window, const GameState& gameState) {
-    sf::Text mainText;
-    sf::Text subText;
+    sf::Text mainText; sf::Text subText;
     if (!font.loadFromFile("assets/arial.ttf")) { return; }
     mainText.setFont(font); subText.setFont(font);
     const unsigned int mainSize = static_cast<unsigned int>(SQUARE_SIZE * 0.55f);
@@ -237,16 +267,24 @@ void Graphics::drawPieces(sf::RenderWindow& window, const GameState& gameState) 
                     case 1: mainText.setString(numberChar); subText.setString(letterChar); break;
                     case 2: mainText.setString(letterChar); subText.setString(""); break;
                 }
-                sf::Color pieceColor = (currentPiece.owner == Player::PLAYER1) ? NightColors::P1_Piece : NightColors::P2_Piece; // Use restored namespace
+                sf::Color pieceColor = (currentPiece.owner == Player::PLAYER1) ? NightColors::P1_Piece : NightColors::P2_Piece;
                 mainText.setFillColor(pieceColor); subText.setFillColor(pieceColor);
+
+                // Get screen position for this internal board square
+                sf::Vector2f screenPos = getScreenPos(r, c);
+
+                // Position Main Text (Centered within the screen square)
                 sf::FloatRect mainBounds = mainText.getLocalBounds();
                 mainText.setOrigin(mainBounds.left + mainBounds.width / 2.0f, mainBounds.top + mainBounds.height / 2.0f);
-                mainText.setPosition(BOARD_OFFSET_X + c * SQUARE_SIZE + SQUARE_SIZE / 2.0f, BOARD_OFFSET_Y + r * SQUARE_SIZE + SQUARE_SIZE / 2.0f);
+                mainText.setPosition(screenPos.x + SQUARE_SIZE / 2.0f, screenPos.y + SQUARE_SIZE / 2.0f);
                 window.draw(mainText);
+
+                // Position and Draw Sub Text (Only if not mode 2)
                 if (pieceDisplayMode != 2) {
                     sf::FloatRect subBounds = subText.getLocalBounds();
                     subText.setOrigin(subBounds.left + subBounds.width, subBounds.top + subBounds.height);
-                    subText.setPosition(BOARD_OFFSET_X + (c + 1) * SQUARE_SIZE - subPadding, BOARD_OFFSET_Y + (r + 1) * SQUARE_SIZE - subPadding);
+                    // Position relative to the screen square's bottom-right
+                    subText.setPosition(screenPos.x + SQUARE_SIZE - subPadding, screenPos.y + SQUARE_SIZE - subPadding);
                     window.draw(subText);
                 }
             }
@@ -254,41 +292,49 @@ void Graphics::drawPieces(sf::RenderWindow& window, const GameState& gameState) 
     }
 }
 
-// Draw highlights
+
+// Draw highlights (Uses getScreenPos)
 void Graphics::drawHighlights(sf::RenderWindow& window,
                               const std::vector<Move>& legalMoveHighlights,
-                              int selectedRow, int selectedCol,
-                              const Move& lastAiMove)
+                              int selectedRow, int selectedCol, // These are internal board coords
+                              const Move& lastAiMove)           // This contains internal board coords
 {
     sf::RectangleShape highlightShape(sf::Vector2f(SQUARE_SIZE, SQUARE_SIZE));
+
+    // 1. Highlight Last AI Move (Use internal coords with getScreenPos)
     if (selectedRow == -1 && lastAiMove.fromRow != -1) {
          highlightShape.setFillColor(sf::Color::Transparent);
-         highlightShape.setOutlineColor(NightColors::LastAiOutline); // Use restored namespace
+         highlightShape.setOutlineColor(NightColors::LastAiOutline);
          highlightShape.setOutlineThickness(3.0f);
-         highlightShape.setPosition(BOARD_OFFSET_X + lastAiMove.fromCol * SQUARE_SIZE, BOARD_OFFSET_Y + lastAiMove.fromRow * SQUARE_SIZE);
+         highlightShape.setPosition(getScreenPos(lastAiMove.fromRow, lastAiMove.fromCol));
          window.draw(highlightShape);
-         highlightShape.setPosition(BOARD_OFFSET_X + lastAiMove.toCol * SQUARE_SIZE, BOARD_OFFSET_Y + lastAiMove.toRow * SQUARE_SIZE);
+         highlightShape.setPosition(getScreenPos(lastAiMove.toRow, lastAiMove.toCol));
          window.draw(highlightShape);
     }
+
+    // 2. Highlight Selected Piece (Use internal coords with getScreenPos)
     if (selectedRow != -1 && selectedCol != -1) {
-        highlightShape.setPosition(BOARD_OFFSET_X + selectedCol * SQUARE_SIZE, BOARD_OFFSET_Y + selectedRow * SQUARE_SIZE);
+        highlightShape.setPosition(getScreenPos(selectedRow, selectedCol));
         highlightShape.setFillColor(sf::Color::Transparent);
-        highlightShape.setOutlineColor(NightColors::SelectedOutline); // Use restored namespace
+        highlightShape.setOutlineColor(NightColors::SelectedOutline);
         highlightShape.setOutlineThickness(3.0f);
         window.draw(highlightShape);
     }
-    highlightShape.setFillColor(NightColors::LegalMoveFill); // Use restored namespace
+
+    // 3. Highlight Legal Moves (Use internal coords with getScreenPos)
+    highlightShape.setFillColor(NightColors::LegalMoveFill);
     highlightShape.setOutlineThickness(0);
     for (const auto& move : legalMoveHighlights) {
-        highlightShape.setPosition(BOARD_OFFSET_X + move.toCol * SQUARE_SIZE, BOARD_OFFSET_Y + move.toRow * SQUARE_SIZE);
+        highlightShape.setPosition(getScreenPos(move.toRow, move.toCol));
         window.draw(highlightShape);
     }
 }
 
-// Draw Setup UI
+
+// Draw Setup UI (No changes needed, UI is fixed position)
 void Graphics::drawSetupUI(sf::RenderWindow& window, Player setupPlayer, PieceType selectedSetupPiece) {
     window.draw(clearButton.shape); window.draw(clearButton.label);
-    sideButton.shape.setFillColor(setupPlayer == Player::PLAYER1 ? NightColors::P1_Piece : NightColors::P2_Piece); // Use restored namespace
+    sideButton.shape.setFillColor(setupPlayer == Player::PLAYER1 ? NightColors::P1_Piece : NightColors::P2_Piece);
     sideButton.label.setString(setupPlayer == Player::PLAYER1 ? "P1" : "P2");
     sf::FloatRect sbounds = sideButton.label.getLocalBounds();
     sideButton.label.setOrigin(sbounds.left + sbounds.width / 2.0f, sbounds.top + sbounds.height / 2.0f);
@@ -296,7 +342,7 @@ void Graphics::drawSetupUI(sf::RenderWindow& window, Player setupPlayer, PieceTy
     window.draw(sideButton.shape); window.draw(sideButton.label);
     for (auto const& [type, button] : pieceButtons) {
         sf::RectangleShape currentShape = button.shape;
-        currentShape.setFillColor(setupPlayer == Player::PLAYER1 ? NightColors::P1_Piece : NightColors::P2_Piece); // Use restored namespace
+        currentShape.setFillColor(setupPlayer == Player::PLAYER1 ? NightColors::P1_Piece : NightColors::P2_Piece);
         if (type == selectedSetupPiece) { currentShape.setOutlineColor(sf::Color::Yellow); currentShape.setOutlineThickness(3.0f); }
         else { currentShape.setOutlineThickness(0); }
         window.draw(currentShape); window.draw(button.label);
