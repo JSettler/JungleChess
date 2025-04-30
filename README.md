@@ -16,6 +16,8 @@ Contains an alpha-beta searcher with move-ordering, piece-square-tables, transpo
 
 --depth [number] : search-depth in plies
 
+--setup : start game in *Setup Mode*
+
 
 **Keys during game:**
 
@@ -69,4 +71,7 @@ When started, the program used to look like this (now can be switched to, with '
 
 Now with alternate piece-sets, this is now the default :
 ![Jungle board](https://github.com/JSettler/JungleChess/blob/master/jungle-chess.png)
+
+Setup-mode added:
+![Jungle board](https://github.com/JSettler/JungleChess/blob/master/jungle_setup-mode.png)
 

@@ -14,33 +14,31 @@ GameState::GameState() {
     Zobrist::initializeKeys();
     currentPlayer = Player::PLAYER1;
     setupInitialBoard(); // This will now calculate the initial hash
-    // std::cout << "GameState initialized. Player " << static_cast<int>(currentPlayer) << " starts." << std::endl;
 }
 
 // --- setupInitialBoard Implementation ---
 void GameState::setupInitialBoard() {
-    // Create the board grid and fill with EMPTY pieces
-    board.assign(BOARD_ROWS, std::vector<Piece>(BOARD_COLS, {PieceType::EMPTY, Player::NONE, 0}));
+    // Assign board with default pieces (weakened=false)
+    board.assign(BOARD_ROWS, std::vector<Piece>(BOARD_COLS, {PieceType::EMPTY, Player::NONE, 0, false}));
 
     // --- Place Player 1 (Bottom, often Blue) Pieces ---
-    board[0][0] = {PieceType::LION, Player::PLAYER1, 7}; board[0][6] = {PieceType::TIGER, Player::PLAYER1, 6};
-    board[1][1] = {PieceType::DOG, Player::PLAYER1, 3}; board[1][5] = {PieceType::CAT, Player::PLAYER1, 2};
-    board[2][0] = {PieceType::RAT, Player::PLAYER1, 1}; board[2][2] = {PieceType::LEOPARD, Player::PLAYER1, 5};
-    board[2][4] = {PieceType::WOLF, Player::PLAYER1, 4}; board[2][6] = {PieceType::ELEPHANT, Player::PLAYER1, 8};
+    board[0][0] = {PieceType::LION, Player::PLAYER1, 7, false}; board[0][6] = {PieceType::TIGER, Player::PLAYER1, 6, false};
+    board[1][1] = {PieceType::DOG, Player::PLAYER1, 3, false}; board[1][5] = {PieceType::CAT, Player::PLAYER1, 2, false};
+    board[2][0] = {PieceType::RAT, Player::PLAYER1, 1, false}; board[2][2] = {PieceType::LEOPARD, Player::PLAYER1, 5, false};
+    board[2][4] = {PieceType::WOLF, Player::PLAYER1, 4, false}; board[2][6] = {PieceType::ELEPHANT, Player::PLAYER1, 8, false};
     // --- Place Player 2 (Top, often Red) Pieces ---
-    board[8][6] = {PieceType::LION, Player::PLAYER2, 7}; board[8][0] = {PieceType::TIGER, Player::PLAYER2, 6};
-    board[7][5] = {PieceType::DOG, Player::PLAYER2, 3}; board[7][1] = {PieceType::CAT, Player::PLAYER2, 2};
-    board[6][6] = {PieceType::RAT, Player::PLAYER2, 1}; board[6][4] = {PieceType::LEOPARD, Player::PLAYER2, 5};
-    board[6][2] = {PieceType::WOLF, Player::PLAYER2, 4}; board[6][0] = {PieceType::ELEPHANT, Player::PLAYER2, 8};
+    board[8][6] = {PieceType::LION, Player::PLAYER2, 7, false}; board[8][0] = {PieceType::TIGER, Player::PLAYER2, 6, false};
+    board[7][5] = {PieceType::DOG, Player::PLAYER2, 3, false}; board[7][1] = {PieceType::CAT, Player::PLAYER2, 2, false};
+    board[6][6] = {PieceType::RAT, Player::PLAYER2, 1, false}; board[6][4] = {PieceType::LEOPARD, Player::PLAYER2, 5, false};
+    board[6][2] = {PieceType::WOLF, Player::PLAYER2, 4, false}; board[6][0] = {PieceType::ELEPHANT, Player::PLAYER2, 8, false};
 
     recalculateHash(); // Calculate initial hash after board is set up
-    // std::cout << "Initial board set up. Hash: " << currentHashKey << std::endl; // Debug
 }
 
 // --- getPiece Implementation ---
 Piece GameState::getPiece(int row, int col) const {
     if (isValidPosition(row, col)) { return board[row][col]; }
-    return {PieceType::EMPTY, Player::NONE, 0}; // Return empty piece for invalid coords
+    return {PieceType::EMPTY, Player::NONE, 0, false}; // Include weakened flag default
 }
 
 // --- isMoveLegal Implementation ---
@@ -108,11 +106,11 @@ bool GameState::isMoveLegal(const Move& move, Player player) const {
         if ((rowDiff == 1 && colDiff == 0) || (rowDiff == 0 && colDiff == 1)) {
              // Special capture rules for Rat
              if (destinationPiece.type != PieceType::EMPTY) { // Attempting capture
-                 // Rat cannot capture Elephant from water
-                 if (destinationPiece.type == PieceType::ELEPHANT && fromSquareIsRiver) return false;
-                 // Rat cannot capture between water/land
+                 // Rat cannot capture anything from water if target is on land, or vice versa
                  if (fromSquareIsRiver != toSquareIsRiver) return false;
-                 // Standard capture check (includes Rat vs Elephant on land)
+                 // Rat cannot capture Elephant from water (this check is technically redundant now due to the above, but harmless)
+                 if (destinationPiece.type == PieceType::ELEPHANT && fromSquareIsRiver) return false;
+                 // General capture check (uses updated canCapture)
                  if (!canCapture(movingPiece, destinationPiece, move.toRow, move.toCol)) return false;
              }
              // If not capturing or capture is valid, the move is legal
@@ -134,9 +132,9 @@ bool GameState::isMoveLegal(const Move& move, Player player) const {
     return false;
 }
 
-// --- Hash update helper (Renamed and uses Player) ---
-// XORs the key for a given piece type AND player at a given square
+// --- Hash update helper ---
 void GameState::updateHashForPieceChange(PieceType type, Player player, int r, int c) {
+    // Hash doesn't depend on 'weakened' status, so this function is unchanged
     if (type != PieceType::EMPTY && player != Player::NONE) {
         int ppi = Zobrist::getPiecePlayerIndex(type, player);
         // Basic bounds check
@@ -145,30 +143,36 @@ void GameState::updateHashForPieceChange(PieceType type, Player player, int r, i
         {
             currentHashKey ^= Zobrist::piecePlayerKeys[ppi][r][c];
         } else {
-             // Use std::cerr for errors, make sure <iostream> is included where Hashing.h is used
              std::cerr << "Warning: Invalid index during hash update. Type: " << static_cast<int>(type)
                        << " Player: " << static_cast<int>(player) << " R: " << r << " C: " << c << std::endl;
         }
     }
 }
 
-// --- applyMove Implementation (Update Hash using new helper) ---
+// --- applyMove Implementation ---
 void GameState::applyMove(const Move& move) {
     Piece movingPiece = getPiece(move.fromRow, move.fromCol);
     Piece capturedPiece = getPiece(move.toRow, move.toCol); // Get piece before overwriting
 
-    // --- Update Hash ---
-    // 1. XOR out the moving piece (with its player) from its original square
+    // --- Update Hash (BEFORE modifying board state) ---
     updateHashForPieceChange(movingPiece.type, movingPiece.owner, move.fromRow, move.fromCol);
-    // 2. XOR out the captured piece (with its player, if any) from the destination square
     updateHashForPieceChange(capturedPiece.type, capturedPiece.owner, move.toRow, move.toCol);
-    // 3. XOR in the moving piece (with its player) at the destination square
-    updateHashForPieceChange(movingPiece.type, movingPiece.owner, move.toRow, move.toCol);
-    // Side to move hash is updated in switchPlayer()
 
     // --- Update Board ---
-    board[move.toRow][move.toCol] = movingPiece;
-    board[move.fromRow][move.fromCol] = {PieceType::EMPTY, Player::NONE, 0};
+    // Check if moving onto an opponent's trap to set weakened flag
+    Player opponent = (movingPiece.owner == Player::PLAYER1) ? Player::PLAYER2 : Player::PLAYER1;
+    if (isOwnTrap(move.toRow, move.toCol, opponent)) {
+        movingPiece.weakened = true; // Set weakened flag permanently
+    }
+    // Note: The weakened status persists even if it moves off the trap later.
+
+    board[move.toRow][move.toCol] = movingPiece; // Place the (potentially weakened) piece
+    board[move.fromRow][move.fromCol] = {PieceType::EMPTY, Player::NONE, 0, false}; // Clear original square
+
+    // --- Update Hash (Part 2: Add moving piece in new location) ---
+    // Must use the piece info *after* potential weakening status change, though hash doesn't use weakened flag
+    updateHashForPieceChange(movingPiece.type, movingPiece.owner, move.toRow, move.toCol);
+    // Side to move hash is updated in switchPlayer()
 }
 
 // --- getAllLegalMoves Implementation ---
@@ -228,7 +232,7 @@ std::vector<Move> GameState::getLegalMovesForPiece(int fromRow, int fromCol) con
 // --- getCurrentPlayer Implementation ---
 Player GameState::getCurrentPlayer() const { return currentPlayer; }
 
-// --- switchPlayer Implementation (Update Hash) ---
+// --- switchPlayer Implementation ---
 void GameState::switchPlayer() {
     currentPlayer = (currentPlayer == Player::PLAYER1) ? Player::PLAYER2 : Player::PLAYER1;
     // Update hash for side change
@@ -273,7 +277,7 @@ bool GameState::isOwnTrap(int r, int c, Player player) const {
       return false;
  }
 
-// --- getRank Implementation (Moved to public) ---
+// --- getRank Implementation ---
 int GameState::getRank(PieceType type) const {
      switch(type) {
         case PieceType::RAT: return 1; case PieceType::CAT: return 2; case PieceType::DOG: return 3;
@@ -283,34 +287,41 @@ int GameState::getRank(PieceType type) const {
 }
 
 // --- Private Helper Implementations ---
+
+//vvv CORRECTED vvv --- Corrected canCapture logic for traps AND permanent weakening PRIORITY --- vvv
 bool GameState::canCapture(const Piece& attacker, const Piece& defender, int defenderRow, int defenderCol) const {
-     if (defender.type == PieceType::EMPTY || attacker.owner == defender.owner) return false;
-
-     Player opponentPlayer = (attacker.owner == Player::PLAYER1) ? Player::PLAYER2 : Player::PLAYER1;
-
-     // Check if defender is in one of opponent's traps (relative to attacker)
-     if (isOwnTrap(defenderRow, defenderCol, opponentPlayer)) {
-         // std::cout << "Debug: Capture allowed due to trap at (" << defenderRow << "," << defenderCol << ")" << std::endl;
-         return true; // Any piece can capture a piece in an opponent's trap
+     // Basic checks: cannot capture empty square or own piece
+     if (defender.type == PieceType::EMPTY || attacker.owner == defender.owner) {
+         return false;
      }
 
-     // Specific Rat/Elephant rules
+     // 1. Trap Rule Check (Highest Priority): Is the DEFENDER on the ATTACKER'S trap?
+     if (isOwnTrap(defenderRow, defenderCol, attacker.owner)) {
+         // If yes, capture is always allowed regardless of rank or special rules.
+         return true;
+     }
+
+     // 2. Permanent Weakening Check (Second Highest Priority): Has the DEFENDER been weakened previously?
+     if (defender.weakened) {
+         // If yes, capture is always allowed, overriding rank AND Rat/Elephant rules.
+         // (An Elephant CAN capture a weakened Rat).
+         return true;
+     }
+
+     // 3. Specific Rat/Elephant rules (Only if not captured via trap or weakening)
      if (attacker.type == PieceType::RAT && defender.type == PieceType::ELEPHANT) {
-         // Rat cannot capture Elephant from water is handled in isMoveLegal
-         // std::cout << "Debug: Capture allowed Rat->Elephant" << std::endl;
+         // Note: Rule about Rat not capturing Elephant from water is handled in isMoveLegal
          return true; // Rat captures Elephant (on land)
      }
      if (attacker.type == PieceType::ELEPHANT && defender.type == PieceType::RAT) {
-         // std::cout << "Debug: Capture denied Elephant->Rat" << std::endl;
-         return false; // Elephant cannot capture Rat
+         return false; // Elephant cannot capture Rat (unless Rat is weakened, checked above)
      }
 
-     // General rank capture rule
-     bool canCap = attacker.rank >= defender.rank;
-     // if (!canCap) std::cout << "Debug: Capture denied Rank " << attacker.rank << " vs " << defender.rank << std::endl;
-     // else std::cout << "Debug: Capture allowed Rank " << attacker.rank << " vs " << defender.rank << std::endl;
-     return canCap;
+     // 4. General rank capture rule (if no other rule applied)
+     return attacker.rank >= defender.rank;
 }
+//^^^ CORRECTED ^^^-----------------------------------------------------------------------^^^
+
 
 // --- Setter Implementations ---
 void GameState::setBoard(const std::vector<std::vector<Piece>>& newBoard) {
@@ -381,11 +392,9 @@ bool GameState::setPieceAt(int r, int c, PieceType type, Player player) {
         }
     }
 
-    // Clear the target square first (no hash update needed here)
-    board[r][c] = {PieceType::EMPTY, Player::NONE, 0};
-
-    // Place the new piece
-    board[r][c] = {type, player, getRank(type)};
+    // Create the new piece (start not weakened)
+    Piece newPiece = {type, player, getRank(type), false}; // Ensure weakened is false on setup placement
+    board[r][c] = newPiece; // Place new (overwrites old)
     // Hash will be recalculated when finishing setup.
     return true;
 }
@@ -393,14 +402,14 @@ bool GameState::setPieceAt(int r, int c, PieceType type, Player player) {
 // Removes piece at location
 void GameState::clearSquare(int r, int c) {
     if (isValidPosition(r, c)) {
-        board[r][c] = {PieceType::EMPTY, Player::NONE, 0};
+        board[r][c] = {PieceType::EMPTY, Player::NONE, 0, false}; // Ensure weakened is false
         // Hash will be recalculated when finishing setup.
     }
 }
 
 // Removes all pieces
 void GameState::clearBoard() {
-     board.assign(BOARD_ROWS, std::vector<Piece>(BOARD_COLS, {PieceType::EMPTY, Player::NONE, 0}));
+     board.assign(BOARD_ROWS, std::vector<Piece>(BOARD_COLS, {PieceType::EMPTY, Player::NONE, 0, false})); // Ensure weakened is false
      // Hash will be recalculated when finishing setup.
 }
 
