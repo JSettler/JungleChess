@@ -23,22 +23,26 @@ Contains an alpha-beta searcher with move-ordering, piece-square-tables, transpo
 
 [left mouse button] : move pieces
 
-[escape] : Quit immediately
+[escape] : Quit after confirmation
 
 [S] : save complete game to program directory (probably "../JungleChess/build")
 
 [L] : load saved game from program directory (if exists)
 
-[Backspace] : undo full move (2 plies)
+[Backspace] : take back the last ply (half-move)
 
-[Shift-Backspace] : redo full move
+[Shift-Backspace] : undo take-back of last ply
 
 [P] : Switch between three different piece-sets
+
+[G] : start AI
 
 
 (The computer plays red, from the bottom. The player always starts with blue.)
 
+
 ----
+
 
 Compilation is easiest under Linux (Mint). You'll need these:
 - a build-environment (GCC, CMake, etc.)
@@ -49,7 +53,7 @@ Compilation is easiest under Linux (Mint). You'll need these:
 **Instructions:**
 
 First, install CMake and the necessary build-environment (ask ChatGPT/Gemini for the exact details, if necessary)
-then download the master-zip (click on that big green button)
+then download the master-zip (click on that big green button), or use *Git* to clone the repo
 
 After download, CD into the "JungleChess" folder/directory, create subDir with "mkdir build".
 
