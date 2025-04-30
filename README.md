@@ -16,7 +16,7 @@ Contains an alpha-beta searcher with move-ordering, piece-square-tables, transpo
 
 --depth [number] : search-depth in plies
 
---setup : start game in *Setup Mode*
+--setup : start program in *Setup Mode*
 
 
 **Keys during game:**
