@@ -35,7 +35,7 @@ Contains an alpha-beta searcher with move-ordering, piece-square-tables, transpo
 
 [P] : Switch between three different piece-sets
 
-[G] : start AI
+[G] : start AI  (if it was its turn to move *or* at the start of the game/after setup)
 
 
 (The computer plays red, from the bottom. The player always starts with blue.)
@@ -63,6 +63,8 @@ Then give command "cmake .." to create all necessary make-files.
 
 Then, a "make" should compile & link everything together.
 
+Or (if you have Linux): just download the "jungle_chess" linux binary + assets/arial.ttf  (you might need to install SFML library in that scenario, i didn't test that)
+
 Have fun!
 
 -----
@@ -78,4 +80,11 @@ Now with alternate piece-sets, this is now the default :
 
 Setup-mode added:
 ![Jungle board](https://github.com/JSettler/JungleChess/blob/master/jungle_setup-mode.png)
+
+-----
+
+social media:
+
+https://discord.gg/257jDH3nmn  - our Dou Shou Qi/Jungle chess community
+
 
