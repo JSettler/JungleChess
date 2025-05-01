@@ -101,7 +101,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  P                 : Cycle piece display emphasis (Letters <-> Numbers).\n";
         std::cout << "  G                 : Make AI move (if it's AI's turn or start of game).\n";
         std::cout << "  R                 : Rotate board view 180 degrees.\n";
-        std::cout << "  <Escape>          : Quit the game immediately.\n\n";
+        std::cout << "  <Escape>          : Quit game.\n\n"; // Updated Escape description
         std::cout << "In-Game Keys (Setup Mode):\n"; // Added section
         std::cout << "  Left Click  : Place selected piece / Select UI button.\n";
         std::cout << "  Right Click : Remove piece from board square.\n";
@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  P           : Cycle piece display emphasis.\n";
         std::cout << "  F           : Finish setup and start game.\n";
         std::cout << "  R           : Rotate board view 180 degrees.\n";
-        std::cout << "  <Escape>    : Quit the game immediately.\n";
+        std::cout << "  <Escape>    : Quit game.\n"; // Updated Escape description
         return 0; // Exit after printing help
     }
     else if (unknownArgumentFound) {
@@ -130,9 +130,7 @@ int main(int argc, char* argv[]) {
 
 
     // --- Initialization ---
-    std::string windowTitle = "Jungle Chess - AlphaBeta AI (Depth " + std::to_string(searchDepth) + ")"; // Base title
-    if (currentMode == AppMode::SETUP) windowTitle += " - SETUP MODE";
-    else windowTitle += " + Undo/Redo";
+    std::string windowTitle = "Jungle Chess v1.0  [depth = " + std::to_string(searchDepth) + "]"; // Updated title format
     sf::RenderWindow window(sf::VideoMode(800, 700), windowTitle);
     window.setFramerateLimit(60);
 
@@ -212,7 +210,7 @@ int main(int argc, char* argv[]) {
                         if (gameState.validateSetup()) {
                             currentMode = AppMode::GAME; gameState.setCurrentPlayer(Player::PLAYER1); // P1 always starts after setup
                             gameState.recalculateHash(); history.clear(); redoHistory.clear(); history.push_back(gameState); // CRITICAL: Reset history with current setup
-                            window.setTitle("Jungle Chess - AlphaBeta AI (Depth " + std::to_string(searchDepth) + " + Undo/Redo)");
+                            window.setTitle("JungleChess v1.0  [depth = " + std::to_string(searchDepth) + "]"); // Update title
                             if (!quietMode) std::cout << "Setup finished. Player 1 to move." << std::endl;
                             waitingForGo = false; // Ensure not waiting after setup
                         } else { if (!quietMode) std::cerr << "Setup Error: Invalid board position." << std::endl; }
@@ -225,7 +223,7 @@ int main(int argc, char* argv[]) {
                          if (gameState.validateSetup()) {
                             currentMode = AppMode::GAME; gameState.setCurrentPlayer(Player::PLAYER1); gameState.recalculateHash();
                             history.clear(); redoHistory.clear(); history.push_back(gameState); // CRITICAL: Reset history with current setup
-                            window.setTitle("Jungle Chess - AlphaBeta AI (Depth " + std::to_string(searchDepth) + " + Undo/Redo)");
+                            window.setTitle("JungleChess v1.0  [depth = " + std::to_string(searchDepth) + "]"); // Update title
                             if (!quietMode) std::cout << "Setup finished. Player 1 to move." << std::endl;
                             waitingForGo = false; // Ensure not waiting after setup
                         } else { if (!quietMode) std::cerr << "Setup Error: Invalid board position." << std::endl; }
@@ -325,6 +323,7 @@ int main(int argc, char* argv[]) {
         } // End event loop
 
 
+
         // --- AI Turn Logic (Only in Game Mode and if not confirming quit) ---
         // Execute if it's AI's turn AND we are NOT waiting for 'G', OR if force flag is set
         if (currentMode == AppMode::GAME && !gameOver && !confirmingQuit &&
@@ -343,22 +342,36 @@ int main(int argc, char* argv[]) {
                 AIMoveInfo aiResult = AI::getBestMove(gameState, searchDepth, debugMode, quietMode);
                 auto stopTime = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime);
-                gameState.applyMove(aiResult.bestMove); lastAiMove = aiResult.bestMove;
-                if (!quietMode) {
-                    double durationSeconds = duration.count() / 1000.0;
-                    double nodesPerSecond = (durationSeconds > 0.0001) ? (static_cast<double>(aiResult.nodesSearched) / durationSeconds) : 0.0;
-                    std::cout << "AI calculation time: " << duration.count() << " ms | "
-                              << "Nodes: " << aiResult.nodesSearched << " | "
-                              << std::fixed << std::setprecision(0) << nodesPerSecond << " N/s";
-                    #ifdef USE_TRANSPOSITION_TABLE
-                    std::cout << " | " << std::fixed << std::setprecision(1) << "TT Util: " << aiResult.ttUtilizationPercent << "%";
-                    #endif
-                    std::cout << std::resetiosflags(std::ios::fixed) << std::endl;
+
+                // Check if AI returned a valid move before applying
+                if (aiResult.bestMove.fromRow != -1) { // Check if move is valid
+                    gameState.applyMove(aiResult.bestMove);
+                    lastAiMove = aiResult.bestMove; // Store move for highlight
+
+                    // Print stats (Score is now handled inside AI::getBestMove log)
+                    if (!quietMode) {
+                        double durationSeconds = duration.count() / 1000.0;
+                        double nodesPerSecond = (durationSeconds > 0.0001) ? (static_cast<double>(aiResult.nodesSearched) / durationSeconds) : 0.0; // Avoid division by zero
+
+                        std::cout << "AI calculation time: " << duration.count() << " ms | "
+                                  << "Nodes: " << aiResult.nodesSearched << " | "
+                                  << std::fixed << std::setprecision(0) << nodesPerSecond << " N/s";
+                        #ifdef USE_TRANSPOSITION_TABLE
+                        std::cout << " | " << std::fixed << std::setprecision(1) << "TT Util: " << aiResult.ttUtilizationPercent << "%";
+                        #endif
+                        std::cout << std::resetiosflags(std::ios::fixed) << std::endl;
+                    }
+
+                    gameState.switchPlayer(); // Switch back to Player 1
+                    history.push_back(gameState);
+                    redoHistory.clear(); // Clear redo on new move
+                    waitingForGo = false; // AI has moved, no longer waiting
+                } else {
+                     if (!quietMode) std::cerr << "Error: AI failed to return a valid move!" << std::endl;
+                     // If AI fails, maybe just let human try again? Don't switch player.
+                     // gameState.switchPlayer(); // Maybe don't switch?
+                     waitingForGo = false; // No longer waiting, but AI didn't move.
                 }
-                gameState.switchPlayer(); // Switch back to Player 1
-                history.push_back(gameState);
-                redoHistory.clear(); // Clear redo on new move
-                waitingForGo = false; // AI has moved, no longer waiting
             }
         } // End AI Turn
 

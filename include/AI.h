@@ -47,6 +47,7 @@ struct AIMoveInfo {
     Move bestMove = {-1,-1,-1,-1};
     uint64_t nodesSearched = 0;
     double ttUtilizationPercent = 0.0; // Will be 0 if TT is disabled
+    int finalScore = 0; // The raw evaluation score of the chosen move
 };
 
 

@@ -28,7 +28,7 @@ int scoreMoveStatic(const Move& move, const GameState& gameState) {
         // MVV-LVA inspired scoring (simple version)
         return 10000000 + (Evaluation::getPieceValue(targetPiece.type) * 10) - Evaluation::getPieceValue(attackerPiece.type);
     }
-    // 3. TODO: Add other heuristic scores
+    // 3. TODO: Add other heuristic scores (e.g., pawn promotion, positional improvements)
     // 4. Default score
     return 0;
 }
@@ -225,11 +225,10 @@ AIMoveInfo AI::getBestMove(const GameState& currentGameState, int searchDepth, b
     std::sort(scoredInitialMoves.begin(), scoredInitialMoves.end(), std::greater<ScoredMove>());
 
     Move bestMove = scoredInitialMoves[0].move; // Initialize with the heuristically best move
-    int bestScore = -std::numeric_limits<int>::max();
+    int bestScore = -std::numeric_limits<int>::max(); // Raw internal score
 
     int alpha = -std::numeric_limits<int>::max();
     int beta = std::numeric_limits<int>::max();
-    // int initialAlpha = alpha; // Store if needed for root TT entry
 
     // Print thinking message using passed depth
 #ifdef USE_TRANSPOSITION_TABLE
@@ -248,13 +247,13 @@ AIMoveInfo AI::getBestMove(const GameState& currentGameState, int searchDepth, b
         const Move& move = scoredMove.move;
         GameState nextState = currentGameState; nextState.applyMove(move);
         Player winner = nextState.checkWinner();
-        int currentMoveScore;
+        int currentMoveScore; // Raw internal score for this move branch
 
         if (winner == aiPlayer) {
-            currentMoveScore = Evaluation::WIN_SCORE;
+            currentMoveScore = Evaluation::WIN_SCORE; // Use raw WIN_SCORE internally
             if (!quietMode) std::cout << "  Found Immediate Winning Move (Den): (" << move.fromRow << "," << move.fromCol << ")->(" << move.toRow << "," << move.toCol << ")" << std::endl;
-            bestMove = move; bestScore = currentMoveScore; // Update before returning
-            AIMoveInfo result; result.bestMove = bestMove; result.nodesSearched = nodesSearched;
+            bestMove = move; bestScore = currentMoveScore; // Update best RAW score
+            AIMoveInfo result; result.bestMove = bestMove; result.nodesSearched = nodesSearched; result.finalScore = bestScore; // Store raw score
             #ifdef USE_TRANSPOSITION_TABLE
             result.ttUtilizationPercent = getTTUtilization();
             #else
@@ -267,19 +266,23 @@ AIMoveInfo AI::getBestMove(const GameState& currentGameState, int searchDepth, b
             currentMoveScore = alphaBeta(nextState, searchDepth - 1, searchDepth, alpha, beta, false, debugMode); // false = minimizing player
         }
 
-        // Debug Output
+        // Debug Output - Scale the score HERE for display
         if (debugMode) {
              Piece movedPiece = currentGameState.getPiece(move.fromRow, move.fromCol);
              Piece capturedPiece = currentGameState.getPiece(move.toRow, move.toCol);
+             // Scale score to milliCats (divide by 3, assuming Cat=3000)
+             int displayScore = currentMoveScore / 3;
              std::cout << "  AI Move (" << move.fromRow << "," << move.fromCol << ")->(" << move.toRow << "," << move.toCol << ")"
                        << " (P" << static_cast<int>(movedPiece.type) << ")"
                        << (capturedPiece.type != PieceType::EMPTY ? " Cap P" + std::to_string(static_cast<int>(capturedPiece.type)) : "")
-                       << " -> AB Score: " << currentMoveScore << " (Static: " << scoredMove.score << ")" << std::endl;
+                       // Display scaled score with sign
+                       << " -> AB Score: " << (displayScore >= 0 ? "+" : "") << displayScore << " mC"
+                       << " (Static: " << scoredMove.score << ")" << std::endl;
         }
 
-        // Update best move
+        // Update best move using RAW internal score
         if (currentMoveScore > bestScore) {
-             if (debugMode) std::cout << "    New best score! (" << currentMoveScore << " > " << bestScore << ")" << std::endl;
+             if (debugMode) std::cout << "    New best score! (" << currentMoveScore << " > " << bestScore << ")" << std::endl; // Show raw score comparison
             bestScore = currentMoveScore; bestMove = move;
             alpha = std::max(alpha, bestScore); // Update alpha at the top level
         }
@@ -287,21 +290,25 @@ AIMoveInfo AI::getBestMove(const GameState& currentGameState, int searchDepth, b
          // if (beta <= alpha) { break; }
     }
 
-    // Log final choice using passed depth
+    // Log final choice - Scale the score HERE for display
     if (!quietMode) {
         Piece bestMovedPiece = currentGameState.getPiece(bestMove.fromRow, bestMove.fromCol);
         Piece bestCapturedPiece = currentGameState.getPiece(bestMove.toRow, bestMove.toCol);
+        // Scale final best score to milliCats
+        int displayScore = bestScore / 3;
         std::cout << "AI Chose Best Move (Alpha-Beta " << searchDepth << "-ply, Ordered, " << ttStatus << "): ("
                   << bestMove.fromRow << "," << bestMove.fromCol << ")->(" << bestMove.toRow << "," << bestMove.toCol << ")"
                   << " (Piece: " << static_cast<int>(bestMovedPiece.type) << ")"
                   << (bestCapturedPiece.type != PieceType::EMPTY ? " Captures: " + std::to_string(static_cast<int>(bestCapturedPiece.type)) : "")
-                  << " | Final Score: " << bestScore << std::endl;
+                  // Display scaled score with sign
+                  << " | Final Score: " << (displayScore >= 0 ? "+" : "") << displayScore << " mC" << std::endl;
     }
 
     // Construct and return result struct
     AIMoveInfo result;
     result.bestMove = bestMove;
     result.nodesSearched = nodesSearched;
+    result.finalScore = bestScore; // Return the RAW internal score
 #ifdef USE_TRANSPOSITION_TABLE
     result.ttUtilizationPercent = getTTUtilization();
 #else
