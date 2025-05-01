@@ -40,7 +40,7 @@ Contains an alpha-beta searcher with move-ordering, piece-square-tables, transpo
 [R] : rotate the board by 180°
 
 
-(The computer plays red, from the bottom. The player always starts with blue.)
+(The computer plays red.)
 
 
 ----

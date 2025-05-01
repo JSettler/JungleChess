@@ -100,8 +100,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  L                 : Load game state from dsq-game.sav (clears undo/redo history).\n";
         std::cout << "  P                 : Cycle piece display emphasis (Letters <-> Numbers).\n";
         std::cout << "  G                 : Make AI move (if it's AI's turn or start of game).\n";
-        std::cout << "  R                 : Rotate board view 180 degrees.\n"; // Added R key help
-        std::cout << "  <Escape>          : Quit the game.\n\n";
+        std::cout << "  R                 : Rotate board view 180 degrees.\n";
+        std::cout << "  <Escape>          : Quit the game immediately.\n\n";
         std::cout << "In-Game Keys (Setup Mode):\n"; // Added section
         std::cout << "  Left Click  : Place selected piece / Select UI button.\n";
         std::cout << "  Right Click : Remove piece from board square.\n";
@@ -109,8 +109,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  S           : Switch player side for piece placement.\n";
         std::cout << "  P           : Cycle piece display emphasis.\n";
         std::cout << "  F           : Finish setup and start game.\n";
-        std::cout << "  R           : Rotate board view 180 degrees.\n"; // Added R key help
-        std::cout << "  <Escape>    : Quit the game.\n";
+        std::cout << "  R           : Rotate board view 180 degrees.\n";
+        std::cout << "  <Escape>    : Quit the game immediately.\n";
         return 0; // Exit after printing help
     }
     else if (unknownArgumentFound) {
@@ -130,9 +130,9 @@ int main(int argc, char* argv[]) {
 
 
     // --- Initialization ---
-    std::string windowTitle = "JungleChess v1.0  [depth = " + std::to_string(searchDepth) + "]";
+    std::string windowTitle = "Jungle Chess - AlphaBeta AI (Depth " + std::to_string(searchDepth) + ")"; // Base title
     if (currentMode == AppMode::SETUP) windowTitle += " - SETUP MODE";
-    // else windowTitle += " + Undo/Redo";
+    else windowTitle += " + Undo/Redo";
     sf::RenderWindow window(sf::VideoMode(800, 700), windowTitle);
     window.setFramerateLimit(60);
 
@@ -298,7 +298,7 @@ int main(int argc, char* argv[]) {
                         if (gameState.getCurrentPlayer() == aiPlayer && !waitingForGo) {
                              std::cout << "'G' pressed, but AI is already set to move." << std::endl;
                         } else { // Must be P1's turn but not the start
-                             std::cout << "'G' key only works on the very first turn or when it is AI's turn after an Undo." << std::endl;
+                             std::cout << "'G' key only works on the very first turn or when it is AI's turn after an Undo/Redo." << std::endl;
                         }
                     }
                 }
@@ -349,9 +349,11 @@ int main(int argc, char* argv[]) {
                     double nodesPerSecond = (durationSeconds > 0.0001) ? (static_cast<double>(aiResult.nodesSearched) / durationSeconds) : 0.0;
                     std::cout << "AI calculation time: " << duration.count() << " ms | "
                               << "Nodes: " << aiResult.nodesSearched << " | "
-                              << std::fixed << std::setprecision(0) << nodesPerSecond << " N/s | "
-                              << std::fixed << std::setprecision(1) << "TT Util: " << aiResult.ttUtilizationPercent << "%"
-                              << std::resetiosflags(std::ios::fixed) << std::endl;
+                              << std::fixed << std::setprecision(0) << nodesPerSecond << " N/s";
+                    #ifdef USE_TRANSPOSITION_TABLE
+                    std::cout << " | " << std::fixed << std::setprecision(1) << "TT Util: " << aiResult.ttUtilizationPercent << "%";
+                    #endif
+                    std::cout << std::resetiosflags(std::ios::fixed) << std::endl;
                 }
                 gameState.switchPlayer(); // Switch back to Player 1
                 history.push_back(gameState);

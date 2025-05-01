@@ -26,7 +26,7 @@ namespace NightColors {
 
 
 // Constructor
-Graphics::Graphics() : pieceDisplayMode(0), boardFlipped(false) { // Initialize flags
+Graphics::Graphics() : pieceDisplayMode(0), boardFlipped(true) { // Initialize flags (boardFlipped defaults to true)
     if (!font.loadFromFile("assets/arial.ttf")) {
          std::cerr << "Warning: Could not load default font 'assets/arial.ttf'." << std::endl;
     }
@@ -179,8 +179,9 @@ void Graphics::togglePieceDisplay() {
 // Toggle board flip implementation
 void Graphics::toggleBoardFlip() {
     boardFlipped = !boardFlipped;
+    // Message now reflects the state AFTER the toggle
     std::cout << "Board orientation toggled. Player 1 is now at the "
-              << (boardFlipped ? "TOP" : "BOTTOM") << "." << std::endl;
+              << (boardFlipped ? "BOTTOM" : "TOP") << "." << std::endl;
 }
 
 // Helper to get screen position based on flip

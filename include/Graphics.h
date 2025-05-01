@@ -34,7 +34,7 @@ public:
                    const Move& lastAiMove);
 
     // --- Utility Functions ---
-    sf::Vector2i getClickedSquare(const sf::Vector2i& mousePos) const; // Needs update for flip
+    sf::Vector2i getClickedSquare(const sf::Vector2i& mousePos) const;
     PieceType getClickedSetupPieceButton(const sf::Vector2i& mousePos) const;
     bool isClickOnClearButton(const sf::Vector2i& mousePos) const;
     bool isClickOnSideButton(const sf::Vector2i& mousePos) const;
@@ -43,17 +43,16 @@ public:
 
     // --- Method to toggle display mode ---
     void togglePieceDisplay();
-    //vvv NEW vvv --- Method to toggle board orientation --- vvv
+    // --- Method to toggle board orientation ---
     void toggleBoardFlip();
-    //^^^ NEW ^^^------------------------------------------^^^
 
 private:
     // --- Private Members ---
     sf::Font font;
     int pieceDisplayMode = 0;
-    //vvv NEW vvv --- Flag for board orientation --- vvv
-    bool boardFlipped = false; // Default: P1 (Blue) at bottom
-    //^^^ NEW ^^^----------------------------------^^^
+    //vvv MODIFIED vvv --- Default board orientation to flipped --- vvv
+    bool boardFlipped = true; // Default: P1 (Blue) at TOP
+    //^^^ MODIFIED ^^^--------------------------------------------^^^
 
     // UI Element Storage
     struct ButtonUI { sf::RectangleShape shape; sf::Text label; sf::FloatRect bounds; };
@@ -62,9 +61,7 @@ private:
 
     // --- Private Helper Functions ---
     void setupUIElements();
-    //vvv NEW vvv --- Helper to get screen coords from board coords --- vvv
-    sf::Vector2f getScreenPos(int r, int c) const;
-    //^^^ NEW ^^^-----------------------------------------------------^^^
+    sf::Vector2f getScreenPos(int r, int c) const; // Helper for flipped coords
     void drawGrid(sf::RenderWindow& window, const GameState& gameState);
     void drawPieces(sf::RenderWindow& window, const GameState& gameState);
     void drawHighlights(sf::RenderWindow& window,

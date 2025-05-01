@@ -28,7 +28,7 @@ int scoreMoveStatic(const Move& move, const GameState& gameState) {
         // MVV-LVA inspired scoring (simple version)
         return 10000000 + (Evaluation::getPieceValue(targetPiece.type) * 10) - Evaluation::getPieceValue(attackerPiece.type);
     }
-    // 3. TODO: Add other heuristic scores (e.g., pawn promotion, positional improvements)
+    // 3. TODO: Add other heuristic scores
     // 4. Default score
     return 0;
 }
@@ -40,11 +40,12 @@ std::string indent(int depth, int maxDepth) {
 }
 
 
-// Define static TT members
+// Define static members
+uint64_t AI::nodesSearched = 0; // Always defined
+
+#ifdef USE_TRANSPOSITION_TABLE // Only define TT members if using TTs
 std::vector<TTEntry> AI::transpositionTable;
 bool AI::ttInitialized = false;
-uint64_t AI::nodesSearched = 0;
-
 
 // Initialize TT
 void AI::initializeTT() {
@@ -57,15 +58,12 @@ void AI::initializeTT() {
             std::cout << "Transposition Table initialized (Size: " << TT_SIZE << " entries)." << std::endl;
         } catch (const std::bad_alloc& e) {
             std::cerr << "FATAL ERROR: Failed to allocate Transposition Table (Size: " << TT_SIZE << "). " << e.what() << std::endl;
-            // Optionally exit or disable TT usage
              throw; // Re-throw exception
         }
     }
     // Clear entries efficiently before each search
-    // Using a loop might be safer than memset if TTEntry changes
      for (TTEntry& entry : transpositionTable) {
          entry.depth = -1; // Mark as invalid/empty by setting depth
-         // Clearing key is optional if depth check is primary, but good practice
          entry.key = 0;
      }
 }
@@ -81,6 +79,7 @@ double AI::getTTUtilization() {
     }
     return (static_cast<double>(usedCount) / TT_SIZE) * 100.0;
 }
+#endif // USE_TRANSPOSITION_TABLE
 
 
 // --- Alpha-Beta Recursive Helper Function ---
@@ -88,19 +87,13 @@ int AI::alphaBeta(GameState gameState, int depth, int maxDepth, int alpha, int b
 
     int originalAlpha = alpha;
     int originalBeta = beta;
+    Move ttBestMove = {-1,-1,-1,-1}; // Keep this declaration outside TT block
 
-    // Base case: depth limit reached
-    if (depth <= 0) {
-        nodesSearched++;
-        return Evaluation::evaluateBoard(gameState);
-    }
-
+#ifdef USE_TRANSPOSITION_TABLE
+    // 0. Transposition Table Lookup
     uint64_t currentHash = gameState.getHashKey();
     size_t ttIndex = currentHash % TT_SIZE;
     TTEntry& ttEntry = transpositionTable[ttIndex]; // Use reference for potential update
-    Move ttBestMove = {-1,-1,-1,-1};
-
-    // 0. Transposition Table Lookup
     if (ttEntry.key == currentHash && ttEntry.depth >= depth) {
         switch (ttEntry.bound) {
             case TTBound::EXACT:       return ttEntry.score;
@@ -108,24 +101,24 @@ int AI::alphaBeta(GameState gameState, int depth, int maxDepth, int alpha, int b
             case TTBound::UPPER_BOUND: beta = std::min(beta, ttEntry.score); break;
         }
         if (beta <= alpha) return ttEntry.score; // Cutoff based on TT info
-        if (ttEntry.bestMove.fromRow != -1) ttBestMove = ttEntry.bestMove;
+        if (ttEntry.bestMove.fromRow != -1) ttBestMove = ttEntry.bestMove; // Use stored move hint
     }
+#endif // USE_TRANSPOSITION_TABLE
 
-    // 1. Terminal States (Win/Loss/Stalemate)
-    Player winner = gameState.checkWinner(); // Checks Den only
-    if (winner == Player::PLAYER2) return Evaluation::WIN_SCORE + depth; // AI wins
-    if (winner == Player::PLAYER1) return -Evaluation::WIN_SCORE - depth; // Opponent wins
-
+    // 1. Terminal States & Base Case
+    Player winner = gameState.checkWinner();
+    if (winner == Player::PLAYER2) return Evaluation::WIN_SCORE + depth;
+    if (winner == Player::PLAYER1) return -Evaluation::WIN_SCORE - depth;
+    if (depth <= 0) { nodesSearched++; return Evaluation::evaluateBoard(gameState); }
     Player currentPlayer = gameState.getCurrentPlayer();
     std::vector<Move> legalMoves = gameState.getAllLegalMoves(currentPlayer);
-    if (legalMoves.empty()) { // Stalemate or Checkmate (no moves)
-        return isMaximizingPlayer ? (-Evaluation::WIN_SCORE - depth) : (Evaluation::WIN_SCORE + depth);
-    }
+    if (legalMoves.empty()) { return isMaximizingPlayer ? (-Evaluation::WIN_SCORE - depth) : (Evaluation::WIN_SCORE + depth); }
 
-    nodesSearched++; // Count internal nodes explored
+    nodesSearched++; // Count internal nodes
 
     // 2. Score and Sort Moves
     std::vector<ScoredMove> scoredMoves; scoredMoves.reserve(legalMoves.size());
+#ifdef USE_TRANSPOSITION_TABLE
     // Try TT Move first if available and legal
     if(ttBestMove.fromRow != -1) {
         bool ttMoveIsLegal = false;
@@ -137,51 +130,72 @@ int AI::alphaBeta(GameState gameState, int depth, int maxDepth, int alpha, int b
             ttBestMove = {-1,-1,-1,-1}; // Invalidate if not legal in this position
         }
     }
+#endif // USE_TRANSPOSITION_TABLE
     // Score remaining moves
     for (const auto& move : legalMoves) {
+#ifdef USE_TRANSPOSITION_TABLE
         if (ttBestMove.fromRow != -1 && move == ttBestMove) continue; // Don't add TT move twice
+#endif // USE_TRANSPOSITION_TABLE
         scoredMoves.push_back(ScoredMove{move, scoreMoveStatic(move, gameState)});
     }
-    // Sort moves (TT move first, then by score descending)
+    // Sort moves (TT move first if present, then by score descending)
+#ifdef USE_TRANSPOSITION_TABLE
+    // Sort starting after the potential TT move
     std::sort(scoredMoves.begin() + (ttBestMove.fromRow != -1 ? 1 : 0), scoredMoves.end(), std::greater<ScoredMove>());
+#else
+    std::sort(scoredMoves.begin(), scoredMoves.end(), std::greater<ScoredMove>()); // Sort all if no TT move
+#endif // USE_TRANSPOSITION_TABLE
 
 
     // 3. Recursive Exploration
     int bestScoreInNode = isMaximizingPlayer ? -std::numeric_limits<int>::max() : std::numeric_limits<int>::max();
     Move bestMoveForNode = scoredMoves[0].move; // Default best move is the first after sorting
+#ifdef USE_TRANSPOSITION_TABLE
     TTBound resultBound = isMaximizingPlayer ? TTBound::UPPER_BOUND : TTBound::LOWER_BOUND; // Assume the worst initially
+#endif // USE_TRANSPOSITION_TABLE
 
     for (const auto& scoredMove : scoredMoves) {
         GameState nextState = gameState; nextState.applyMove(scoredMove.move); nextState.switchPlayer();
-        int eval = alphaBeta(nextState, depth - 1, maxDepth, alpha, beta, !isMaximizingPlayer, debugMode);
+        int eval = alphaBeta(nextState, depth - 1, maxDepth, alpha, beta, !isMaximizingPlayer, debugMode); // Pass correct maximizing flag
 
         if (isMaximizingPlayer) {
             if (eval > bestScoreInNode) { bestScoreInNode = eval; bestMoveForNode = scoredMove.move; }
             alpha = std::max(alpha, bestScoreInNode);
-            if (beta <= alpha) { resultBound = TTBound::LOWER_BOUND; break; } // Beta cutoff (Fail high)
+            if (beta <= alpha) {
+                #ifdef USE_TRANSPOSITION_TABLE
+                resultBound = TTBound::LOWER_BOUND; // Failed high
+                #endif
+                break; // Beta cutoff
+            }
         } else { // Minimizing Player
             if (eval < bestScoreInNode) { bestScoreInNode = eval; bestMoveForNode = scoredMove.move; }
             beta = std::min(beta, bestScoreInNode);
-            if (beta <= alpha) { resultBound = TTBound::UPPER_BOUND; break; } // Alpha cutoff (Fail low)
+            if (beta <= alpha) {
+                #ifdef USE_TRANSPOSITION_TABLE
+                resultBound = TTBound::UPPER_BOUND; // Failed low
+                #endif
+                break; // Alpha cutoff
+            }
         }
     }
 
+#ifdef USE_TRANSPOSITION_TABLE
+    // --- Store Result in TT ---
     // Determine final bound type more accurately based on original alpha/beta
     if (isMaximizingPlayer) {
         if (bestScoreInNode <= originalAlpha) resultBound = TTBound::UPPER_BOUND;
-        else if (bestScoreInNode >= beta) resultBound = TTBound::LOWER_BOUND; // Check against current beta
+        else if (bestScoreInNode >= beta) resultBound = TTBound::LOWER_BOUND;
         else resultBound = TTBound::EXACT;
     } else { // Minimizing
         if (bestScoreInNode >= originalBeta) resultBound = TTBound::LOWER_BOUND;
-        else if (bestScoreInNode <= alpha) resultBound = TTBound::UPPER_BOUND; // Check against current alpha
+        else if (bestScoreInNode <= alpha) resultBound = TTBound::UPPER_BOUND;
         else resultBound = TTBound::EXACT;
     }
-
-    // --- Store Result in TT ---
     // Replace if the new result is from the same or deeper search
     if (ttEntry.depth <= depth) {
          ttEntry = {currentHash, depth, bestScoreInNode, resultBound, bestMoveForNode};
     }
+#endif // USE_TRANSPOSITION_TABLE
 
     return bestScoreInNode;
 }
@@ -189,13 +203,18 @@ int AI::alphaBeta(GameState gameState, int depth, int maxDepth, int alpha, int b
 
 // --- Main AI Function: Uses Alpha-Beta ---
 AIMoveInfo AI::getBestMove(const GameState& currentGameState, int searchDepth, bool debugMode, bool quietMode) {
+#ifdef USE_TRANSPOSITION_TABLE
     initializeTT(); // Clear/Initialize TT before search
+#else
+    // Optionally print a message if TT is disabled and not in quiet mode
+    // if (!quietMode) std::cout << "Note: Transposition Table disabled." << std::endl;
+#endif // USE_TRANSPOSITION_TABLE
+
     nodesSearched = 0; // Reset node counter for this search
 
     Player aiPlayer = currentGameState.getCurrentPlayer();
     std::vector<Move> legalMoves = currentGameState.getAllLegalMoves(aiPlayer);
     if (legalMoves.empty()) {
-        // Should ideally not happen if checked before calling, but handle defensively
         if (!quietMode) std::cerr << "Error: AI called with no legal moves!" << std::endl;
         return AIMoveInfo(); // Return default/empty info
     }
@@ -210,15 +229,21 @@ AIMoveInfo AI::getBestMove(const GameState& currentGameState, int searchDepth, b
 
     int alpha = -std::numeric_limits<int>::max();
     int beta = std::numeric_limits<int>::max();
+    // int initialAlpha = alpha; // Store if needed for root TT entry
 
     // Print thinking message using passed depth
+#ifdef USE_TRANSPOSITION_TABLE
+    const char* ttStatus = "TT";
+#else
+    const char* ttStatus = "NoTT";
+#endif
     if (debugMode) {
-         std::cout << "AI Thinking (TT Depth " << searchDepth << ")... Evaluating " << scoredInitialMoves.size() << " initial moves." << std::endl;
+         std::cout << "AI Thinking (" << ttStatus << " Depth " << searchDepth << ")... Evaluating " << scoredInitialMoves.size() << " initial moves." << std::endl;
     } else if (!quietMode) {
         std::cout << "AI Thinking (Depth " << searchDepth << ")..." << std::endl;
     }
 
-    // Iterate through SORTED initial moves
+    // Iterate through initial moves
     for (const auto& scoredMove : scoredInitialMoves) {
         const Move& move = scoredMove.move;
         GameState nextState = currentGameState; nextState.applyMove(move);
@@ -229,7 +254,12 @@ AIMoveInfo AI::getBestMove(const GameState& currentGameState, int searchDepth, b
             currentMoveScore = Evaluation::WIN_SCORE;
             if (!quietMode) std::cout << "  Found Immediate Winning Move (Den): (" << move.fromRow << "," << move.fromCol << ")->(" << move.toRow << "," << move.toCol << ")" << std::endl;
             bestMove = move; bestScore = currentMoveScore; // Update before returning
-            AIMoveInfo result; result.bestMove = bestMove; result.nodesSearched = nodesSearched; result.ttUtilizationPercent = getTTUtilization();
+            AIMoveInfo result; result.bestMove = bestMove; result.nodesSearched = nodesSearched;
+            #ifdef USE_TRANSPOSITION_TABLE
+            result.ttUtilizationPercent = getTTUtilization();
+            #else
+            result.ttUtilizationPercent = 0.0;
+            #endif
             return result; // Return immediately
         } else {
             nextState.switchPlayer();
@@ -261,7 +291,7 @@ AIMoveInfo AI::getBestMove(const GameState& currentGameState, int searchDepth, b
     if (!quietMode) {
         Piece bestMovedPiece = currentGameState.getPiece(bestMove.fromRow, bestMove.fromCol);
         Piece bestCapturedPiece = currentGameState.getPiece(bestMove.toRow, bestMove.toCol);
-        std::cout << "AI Chose Best Move (Alpha-Beta " << searchDepth << "-ply, Ordered, TT): ("
+        std::cout << "AI Chose Best Move (Alpha-Beta " << searchDepth << "-ply, Ordered, " << ttStatus << "): ("
                   << bestMove.fromRow << "," << bestMove.fromCol << ")->(" << bestMove.toRow << "," << bestMove.toCol << ")"
                   << " (Piece: " << static_cast<int>(bestMovedPiece.type) << ")"
                   << (bestCapturedPiece.type != PieceType::EMPTY ? " Captures: " + std::to_string(static_cast<int>(bestCapturedPiece.type)) : "")
@@ -272,7 +302,11 @@ AIMoveInfo AI::getBestMove(const GameState& currentGameState, int searchDepth, b
     AIMoveInfo result;
     result.bestMove = bestMove;
     result.nodesSearched = nodesSearched;
+#ifdef USE_TRANSPOSITION_TABLE
     result.ttUtilizationPercent = getTTUtilization();
+#else
+    result.ttUtilizationPercent = 0.0; // No TT utilization if disabled
+#endif
 
     return result;
 }
