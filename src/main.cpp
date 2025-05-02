@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
 
 
     // --- Initialization ---
-    std::string windowTitle = "Jungle Chess v1.0  [depth = " + std::to_string(searchDepth) + "]"; // Updated title format
+    std::string windowTitle = "JungleChess v1.0  [depth = " + std::to_string(searchDepth) + "]"; // Updated title format
     sf::RenderWindow window(sf::VideoMode(800, 700), windowTitle);
     window.setFramerateLimit(60);
 
@@ -323,72 +323,22 @@ int main(int argc, char* argv[]) {
         } // End event loop
 
 
-
-        // --- AI Turn Logic (Only in Game Mode and if not confirming quit) ---
-        // Execute if it's AI's turn AND we are NOT waiting for 'G', OR if force flag is set
-        if (currentMode == AppMode::GAME && !gameOver && !confirmingQuit &&
-           ( (gameState.getCurrentPlayer() == aiPlayer && !waitingForGo) || forceAiMove ) ) {
-
-            // Ensure player is AI if forced (handles the 'G' at start case)
-            if (forceAiMove && gameState.getCurrentPlayer() != aiPlayer) {
-                 gameState.setCurrentPlayer(aiPlayer);
-                 gameState.recalculateHash(); // Recalculate hash again just in case
-            }
-
-            std::vector<Move> aiLegalMovesCheck = gameState.getAllLegalMoves(aiPlayer);
-            if (aiLegalMovesCheck.empty()) { gameOver = true; winner = humanPlayer; winReason = "AI (Red) has no legal moves!"; if (!quietMode) std::cout << winReason << std::endl; }
-            else {
-                auto startTime = std::chrono::high_resolution_clock::now();
-                AIMoveInfo aiResult = AI::getBestMove(gameState, searchDepth, debugMode, quietMode);
-                auto stopTime = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime);
-
-                // Check if AI returned a valid move before applying
-                if (aiResult.bestMove.fromRow != -1) { // Check if move is valid
-                    gameState.applyMove(aiResult.bestMove);
-                    lastAiMove = aiResult.bestMove; // Store move for highlight
-
-                    // Print stats (Score is now handled inside AI::getBestMove log)
-                    if (!quietMode) {
-                        double durationSeconds = duration.count() / 1000.0;
-                        double nodesPerSecond = (durationSeconds > 0.0001) ? (static_cast<double>(aiResult.nodesSearched) / durationSeconds) : 0.0; // Avoid division by zero
-
-                        std::cout << "AI calculation time: " << duration.count() << " ms | "
-                                  << "Nodes: " << aiResult.nodesSearched << " | "
-                                  << std::fixed << std::setprecision(0) << nodesPerSecond << " N/s";
-                        #ifdef USE_TRANSPOSITION_TABLE
-                        std::cout << " | " << std::fixed << std::setprecision(1) << "TT Util: " << aiResult.ttUtilizationPercent << "%";
-                        #endif
-                        std::cout << std::resetiosflags(std::ios::fixed) << std::endl;
-                    }
-
-                    gameState.switchPlayer(); // Switch back to Player 1
-                    history.push_back(gameState);
-                    redoHistory.clear(); // Clear redo on new move
-                    waitingForGo = false; // AI has moved, no longer waiting
-                } else {
-                     if (!quietMode) std::cerr << "Error: AI failed to return a valid move!" << std::endl;
-                     // If AI fails, maybe just let human try again? Don't switch player.
-                     // gameState.switchPlayer(); // Maybe don't switch?
-                     waitingForGo = false; // No longer waiting, but AI didn't move.
-                }
-            }
-        } // End AI Turn
-
-
-        // --- Check Game Over Conditions (Only in Game Mode) ---
+        // --- Check Game Over Conditions BEFORE potential AI move ---
         if (currentMode == AppMode::GAME && !gameOver) {
             winner = gameState.checkWinner(); // Check Den
             if (winner != Player::NONE) { gameOver = true; winReason = (winner == Player::PLAYER1 ? "Player 1 (Blue)" : "Player 2 (Red)") + std::string(" reached the Den!"); if (!quietMode) std::cout << winReason << std::endl; }
-            else if (gameState.getCurrentPlayer() == humanPlayer) { // Check Human No Moves
+            else if (gameState.getCurrentPlayer() == humanPlayer) {
                  if (gameState.getAllLegalMoves(humanPlayer).empty()) { gameOver = true; winner = aiPlayer; winReason = "Human (Blue) has no legal moves!"; if (!quietMode) std::cout << winReason << std::endl; }
+            } else if (gameState.getCurrentPlayer() == aiPlayer) { // Check if AI has moves BEFORE its turn logic runs
+                 if (gameState.getAllLegalMoves(aiPlayer).empty()) { gameOver = true; winner = humanPlayer; winReason = "AI (Red) has no legal moves!"; if (!quietMode) std::cout << winReason << std::endl; }
             }
         } // End Game Over Check
 
 
-        // --- Drawing ---
+        // --- Drawing (BEFORE AI move calculation) ---
         window.clear(sf::Color::White);
         graphics.drawBoard(window, gameState, currentMode, setupPlayer, selectedSetupPiece,
+                           gameOver, // Pass gameOver status
                            selectedPieceLegalMoves, pieceSelected ? selectedMove.fromRow : -1,
                            pieceSelected ? selectedMove.fromCol : -1, lastAiMove);
 
@@ -429,6 +379,63 @@ int main(int argc, char* argv[]) {
             }
         }
         window.display();
+
+
+        // --- AI Turn Logic (Only in Game Mode and if not confirming quit) ---
+        // Execute if it's AI's turn AND we are NOT waiting for 'G', OR if force flag is set
+        if (currentMode == AppMode::GAME && !gameOver && !confirmingQuit &&
+           ( (gameState.getCurrentPlayer() == aiPlayer && !waitingForGo) || forceAiMove ) ) {
+
+            // Ensure player is AI if forced (handles the 'G' at start case)
+            if (forceAiMove && gameState.getCurrentPlayer() != aiPlayer) {
+                 gameState.setCurrentPlayer(aiPlayer);
+                 gameState.recalculateHash(); // Recalculate hash again just in case
+            }
+
+            // Re-check for legal moves in case state changed subtly or game ended before AI turn block
+            std::vector<Move> aiLegalMovesCheck = gameState.getAllLegalMoves(aiPlayer);
+            if (aiLegalMovesCheck.empty()) {
+                 // This case should ideally be caught by the check before drawing,
+                 // but double-check here to prevent calling AI::getBestMove with no moves.
+                 if (!gameOver) { // Avoid duplicate game over message
+                     gameOver = true; winner = humanPlayer; winReason = "AI (Red) has no legal moves!";
+                     if (!quietMode) std::cout << winReason << std::endl;
+                 }
+            } else {
+                auto startTime = std::chrono::high_resolution_clock::now();
+                AIMoveInfo aiResult = AI::getBestMove(gameState, searchDepth, debugMode, quietMode);
+                auto stopTime = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime);
+
+                // Check if AI returned a valid move before applying
+                if (aiResult.bestMove.fromRow != -1) {
+                    gameState.applyMove(aiResult.bestMove);
+                    lastAiMove = aiResult.bestMove; // Store move for NEXT frame's highlight
+
+                    // Print stats
+                    if (!quietMode) {
+                        double durationSeconds = duration.count() / 1000.0;
+                        double nodesPerSecond = (durationSeconds > 0.0001) ? (static_cast<double>(aiResult.nodesSearched) / durationSeconds) : 0.0;
+                        std::cout << "AI calculation time: " << duration.count() << " ms | "
+                                  << "Nodes: " << aiResult.nodesSearched << " | "
+                                  << std::fixed << std::setprecision(0) << nodesPerSecond << " N/s";
+                        #ifdef USE_TRANSPOSITION_TABLE
+                        std::cout << " | " << std::fixed << std::setprecision(1) << "TT Util: " << aiResult.ttUtilizationPercent << "%";
+                        #endif
+                        std::cout << std::resetiosflags(std::ios::fixed) << std::endl;
+                    }
+
+                    gameState.switchPlayer(); // Switch back to Player 1 for the NEXT frame
+                    history.push_back(gameState);
+                    redoHistory.clear(); // Clear redo on new move
+                    waitingForGo = false; // AI has moved, no longer waiting
+                } else {
+                     if (!quietMode) std::cerr << "Error: AI failed to return a valid move!" << std::endl;
+                     waitingForGo = false; // Stop waiting even if AI failed
+                }
+            }
+        } // End AI Turn
+
 
     } // End game loop
 

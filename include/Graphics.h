@@ -9,6 +9,7 @@
 class Graphics {
 public:
     // --- Constants ---
+    // Keep integral constants here if needed, or move all for consistency
     static const int SQUARE_SIZE = 60;
     static const int BOARD_OFFSET_X = 50;
     static const int BOARD_OFFSET_Y = 50;
@@ -17,6 +18,12 @@ public:
     static const int UI_BUTTON_WIDTH = 60;
     static const int UI_BUTTON_HEIGHT = 30;
     static const int UI_BUTTON_PADDING = 10;
+
+    //vvv MODIFIED vvv --- Declare static const floats (no initialization) --- vvv
+    static const float INDICATOR_RADIUS;
+    static const float INDICATOR_X;
+    static const float INDICATOR_Y;
+    //^^^ MODIFIED ^^^-------------------------------------------------------^^^
 
 
     // --- Constructor & Asset Loading ---
@@ -29,9 +36,11 @@ public:
                    AppMode currentMode,
                    Player setupPlayer,
                    PieceType selectedSetupPiece,
+                   bool gameOver, // Needed to hide indicator when game ends
                    const std::vector<Move>& legalMoveHighlights,
                    int selectedRow, int selectedCol,
                    const Move& lastAiMove);
+
 
     // --- Utility Functions ---
     sf::Vector2i getClickedSquare(const sf::Vector2i& mousePos) const;
@@ -50,18 +59,17 @@ private:
     // --- Private Members ---
     sf::Font font;
     int pieceDisplayMode = 0;
-    //vvv MODIFIED vvv --- Default board orientation to flipped --- vvv
-    bool boardFlipped = true; // Default: P1 (Blue) at TOP
-    //^^^ MODIFIED ^^^--------------------------------------------^^^
+    bool boardFlipped = true; // Default: P1 (Blue) at bottom (visually)
 
     // UI Element Storage
     struct ButtonUI { sf::RectangleShape shape; sf::Text label; sf::FloatRect bounds; };
     std::map<PieceType, ButtonUI> pieceButtons;
     ButtonUI clearButton; ButtonUI sideButton; ButtonUI finishButton;
+    sf::CircleShape turnIndicatorDot;
 
     // --- Private Helper Functions ---
     void setupUIElements();
-    sf::Vector2f getScreenPos(int r, int c) const; // Helper for flipped coords
+    sf::Vector2f getScreenPos(int r, int c) const;
     void drawGrid(sf::RenderWindow& window, const GameState& gameState);
     void drawPieces(sf::RenderWindow& window, const GameState& gameState);
     void drawHighlights(sf::RenderWindow& window,
@@ -69,6 +77,7 @@ private:
                         int selectedRow, int selectedCol,
                         const Move& lastAiMove);
     void drawSetupUI(sf::RenderWindow& window, Player setupPlayer, PieceType selectedSetupPiece);
+    void drawTurnIndicator(sf::RenderWindow& window, const GameState& gameState);
 };
 
 

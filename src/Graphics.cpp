@@ -7,6 +7,12 @@
 #include <map>
 #include <cmath> // For std::floor
 
+//vvv NEW vvv --- Define and initialize static const floats --- vvv
+const float Graphics::INDICATOR_RADIUS = 10.0f;
+const float Graphics::INDICATOR_X = Graphics::BOARD_OFFSET_X; // Use scope resolution
+const float Graphics::INDICATOR_Y = Graphics::BOARD_OFFSET_Y - Graphics::INDICATOR_RADIUS * 2.5f;
+//^^^ NEW ^^^-------------------------------------------------^^^
+
 // Define Night Mode Colors
 namespace NightColors {
     const sf::Color Background = sf::Color(40, 40, 50);
@@ -17,8 +23,8 @@ namespace NightColors {
     const sf::Color P2_Den = sf::Color(110, 40, 40);
     const sf::Color P1_Trap = sf::Color(0, 60, 80);
     const sf::Color P2_Trap = sf::Color(90, 20, 20);
-    const sf::Color P1_Piece = sf::Color(0, 180, 220);
-    const sf::Color P2_Piece = sf::Color(230, 120, 0);
+    const sf::Color P1_Piece = sf::Color(0, 180, 220); // Blue for Player 1
+    const sf::Color P2_Piece = sf::Color(230, 120, 0); // Orange/Red for Player 2
     const sf::Color SelectedOutline = sf::Color(255, 255, 0, 200);
     const sf::Color LegalMoveFill = sf::Color(0, 255, 0, 100);
     const sf::Color LastAiOutline = sf::Color(255, 0, 0, 200);
@@ -26,11 +32,17 @@ namespace NightColors {
 
 
 // Constructor
-Graphics::Graphics() : pieceDisplayMode(0), boardFlipped(true) { // Initialize flags (boardFlipped defaults to true)
+Graphics::Graphics() : pieceDisplayMode(0), boardFlipped(true) { // Initialize flags
     if (!font.loadFromFile("assets/arial.ttf")) {
          std::cerr << "Warning: Could not load default font 'assets/arial.ttf'." << std::endl;
     }
     setupUIElements(); // Setup UI elements
+    // Initialize Turn Indicator Dot using the static const members
+    turnIndicatorDot.setRadius(INDICATOR_RADIUS);
+    turnIndicatorDot.setOrigin(INDICATOR_RADIUS, INDICATOR_RADIUS); // Center origin
+    turnIndicatorDot.setPosition(INDICATOR_X + INDICATOR_RADIUS, INDICATOR_Y); // Position center
+    turnIndicatorDot.setOutlineColor(sf::Color(200, 200, 200));
+    turnIndicatorDot.setOutlineThickness(1.0f);
 }
 
 // Load graphical assets
@@ -181,7 +193,7 @@ void Graphics::toggleBoardFlip() {
     boardFlipped = !boardFlipped;
     // Message now reflects the state AFTER the toggle
     std::cout << "Board orientation toggled. Player 1 is now at the "
-              << (boardFlipped ? "BOTTOM" : "TOP") << "." << std::endl;
+              << (boardFlipped ? "BOTTOM" : "TOP") << "." << std::endl; // Corrected message logic
 }
 
 // Helper to get screen position based on flip
@@ -203,15 +215,23 @@ void Graphics::drawBoard(sf::RenderWindow& window,
                          AppMode currentMode,
                          Player setupPlayer,
                          PieceType selectedSetupPiece,
+                         bool gameOver, // Added gameOver flag
                          const std::vector<Move>& legalMoveHighlights,
                          int selectedRow, int selectedCol,
                          const Move& lastAiMove) {
     window.clear(NightColors::Background);
+
+    // Draw indicator first (only in game mode, not game over)
+    if (currentMode == AppMode::GAME && !gameOver) {
+         drawTurnIndicator(window, gameState);
+    }
+
     drawGrid(window, gameState);
     drawPieces(window, gameState);
+
     if (currentMode == AppMode::SETUP) {
         drawSetupUI(window, setupPlayer, selectedSetupPiece);
-    } else {
+    } else { // Only draw game highlights in game mode
         drawHighlights(window, legalMoveHighlights, selectedRow, selectedCol, lastAiMove);
     }
 }
@@ -349,6 +369,19 @@ void Graphics::drawSetupUI(sf::RenderWindow& window, Player setupPlayer, PieceTy
         window.draw(currentShape); window.draw(button.label);
     }
     window.draw(finishButton.shape); window.draw(finishButton.label);
+}
+
+// Draw Turn Indicator Implementation
+void Graphics::drawTurnIndicator(sf::RenderWindow& window, const GameState& gameState) {
+    Player currentPlayer = gameState.getCurrentPlayer();
+    if (currentPlayer == Player::PLAYER1) {
+        turnIndicatorDot.setFillColor(NightColors::P1_Piece); // Blue dot
+    } else if (currentPlayer == Player::PLAYER2) {
+        turnIndicatorDot.setFillColor(NightColors::P2_Piece); // Orange/Red dot
+    } else {
+        turnIndicatorDot.setFillColor(sf::Color::Transparent); // Hide if no player
+    }
+    window.draw(turnIndicatorDot);
 }
 
 
