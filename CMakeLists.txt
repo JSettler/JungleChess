@@ -36,6 +36,7 @@ add_executable(jungle_chess
     src/Graphics.cpp
     src/AI.cpp
     src/Hashing.cpp
+    src/Book.cpp
 )
 
 # Link SFML libraries

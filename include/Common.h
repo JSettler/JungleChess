@@ -22,7 +22,8 @@ enum class PieceType : int8_t {
 
 enum class AppMode {
     GAME,
-    SETUP
+    SETUP,
+    BOOK_EDITOR // <<< NEW
 };
 
 
@@ -31,9 +32,7 @@ struct Piece {
     PieceType type = PieceType::EMPTY;
     Player owner = Player::NONE;
     int rank = 0; // Rank (1=Rat to 8=Elephant)
-    //vvv NEW vvv --- Flag for permanent trap weakening --- vvv
     bool weakened = false; // True if piece has ever entered an opponent trap
-    //^^^ NEW ^^^-----------------------------------------^^^
 };
 
 struct Move {

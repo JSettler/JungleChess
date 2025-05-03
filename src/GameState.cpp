@@ -41,6 +41,11 @@ Piece GameState::getPiece(int row, int col) const {
     return {PieceType::EMPTY, Player::NONE, 0, false}; // Include weakened flag default
 }
 
+// <<< NEW: getBoard Implementation >>>
+const std::vector<std::vector<Piece>>& GameState::getBoard() const {
+    return board;
+}
+
 // --- isMoveLegal Implementation ---
 bool GameState::isMoveLegal(const Move& move, Player player) const {
     // 1. Basic Validity Checks
@@ -108,7 +113,7 @@ bool GameState::isMoveLegal(const Move& move, Player player) const {
              if (destinationPiece.type != PieceType::EMPTY) { // Attempting capture
                  // Rat cannot capture anything from water if target is on land, or vice versa
                  if (fromSquareIsRiver != toSquareIsRiver) return false;
-                 // Rat cannot capture Elephant from water (this check is technically redundant now due to the above, but harmless)
+                 // Rat cannot capture Elephant from water (explicit check)
                  if (destinationPiece.type == PieceType::ELEPHANT && fromSquareIsRiver) return false;
                  // General capture check (uses updated canCapture)
                  if (!canCapture(movingPiece, destinationPiece, move.toRow, move.toCol)) return false;
@@ -143,8 +148,8 @@ void GameState::updateHashForPieceChange(PieceType type, Player player, int r, i
         {
             currentHashKey ^= Zobrist::piecePlayerKeys[ppi][r][c];
         } else {
-             std::cerr << "Warning: Invalid index during hash update. Type: " << static_cast<int>(type)
-                       << " Player: " << static_cast<int>(player) << " R: " << r << " C: " << c << std::endl;
+             // Suppress warning in non-debug? Or keep it? Let's keep it.
+             std::cerr << "Warning: Invalid index during hash update. ppi=" << ppi << " R=" << r << " C=" << c << std::endl;
         }
     }
 }
@@ -209,14 +214,14 @@ std::vector<Move> GameState::getAllLegalMoves(Player player) const {
 // --- getLegalMovesForPiece Implementation ---
 std::vector<Move> GameState::getLegalMovesForPiece(int fromRow, int fromCol) const {
     std::vector<Move> legalMoves;
-    Player player = getCurrentPlayer(); // Use the current player
-
+    // Use the owner of the piece at the square, not necessarily the current player
     if (!isValidPosition(fromRow, fromCol)) return legalMoves;
     Piece piece = getPiece(fromRow, fromCol);
-    if (piece.owner != player || piece.type == PieceType::EMPTY) return legalMoves;
+    Player player = piece.owner;
+    if (player == Player::NONE || piece.type == PieceType::EMPTY) return legalMoves;
 
     // Iterate through ALL possible destination squares
-    // This is less efficient than targeted generation but simpler for this helper
+    // This is less efficient than targeted generation but simpler for this UI helper
     for (int toRow = 0; toRow < BOARD_ROWS; ++toRow) {
         for (int toCol = 0; toCol < BOARD_COLS; ++toCol) {
             Move testMove = {fromRow, fromCol, toRow, toCol};
@@ -234,9 +239,12 @@ Player GameState::getCurrentPlayer() const { return currentPlayer; }
 
 // --- switchPlayer Implementation ---
 void GameState::switchPlayer() {
+    Player oldPlayer = currentPlayer;
     currentPlayer = (currentPlayer == Player::PLAYER1) ? Player::PLAYER2 : Player::PLAYER1;
-    // Update hash for side change
-    currentHashKey ^= Zobrist::sideToMoveKey;
+    // Update hash for side change only if the player actually changed
+    if (oldPlayer != currentPlayer) {
+        currentHashKey ^= Zobrist::sideToMoveKey;
+    }
 }
 
 // --- checkWinner Implementation ---
@@ -287,8 +295,6 @@ int GameState::getRank(PieceType type) const {
 }
 
 // --- Private Helper Implementations ---
-
-//vvv CORRECTED vvv --- Corrected canCapture logic for traps AND permanent weakening PRIORITY --- vvv
 bool GameState::canCapture(const Piece& attacker, const Piece& defender, int defenderRow, int defenderCol) const {
      // Basic checks: cannot capture empty square or own piece
      if (defender.type == PieceType::EMPTY || attacker.owner == defender.owner) {
@@ -297,14 +303,11 @@ bool GameState::canCapture(const Piece& attacker, const Piece& defender, int def
 
      // 1. Trap Rule Check (Highest Priority): Is the DEFENDER on the ATTACKER'S trap?
      if (isOwnTrap(defenderRow, defenderCol, attacker.owner)) {
-         // If yes, capture is always allowed regardless of rank or special rules.
          return true;
      }
 
      // 2. Permanent Weakening Check (Second Highest Priority): Has the DEFENDER been weakened previously?
      if (defender.weakened) {
-         // If yes, capture is always allowed, overriding rank AND Rat/Elephant rules.
-         // (An Elephant CAN capture a weakened Rat).
          return true;
      }
 
@@ -320,24 +323,34 @@ bool GameState::canCapture(const Piece& attacker, const Piece& defender, int def
      // 4. General rank capture rule (if no other rule applied)
      return attacker.rank >= defender.rank;
 }
-//^^^ CORRECTED ^^^-----------------------------------------------------------------------^^^
 
 
 // --- Setter Implementations ---
 void GameState::setBoard(const std::vector<std::vector<Piece>>& newBoard) {
     if (newBoard.size() == BOARD_ROWS && (!newBoard.empty() && newBoard[0].size() == BOARD_COLS)) {
         board = newBoard;
-        // Hash must be recalculated or set explicitly after this
+        // WARNING: Hash is NOT updated here. Caller must call recalculateHash or setHashKey.
     } else {
         std::cerr << "Error: Attempted to set board with invalid dimensions." << std::endl;
     }
 }
 
 void GameState::setCurrentPlayer(Player player) {
-    // Consider updating hash if player changes without switchPlayer?
-    // Best practice: Recalculate hash after manually setting player/board.
-    currentPlayer = player;
+    // Update hash only if player actually changes
+    // This prevents XORing the side key unnecessarily if setting to the same player
+    if (player != currentPlayer && player != Player::NONE) {
+        // XOR out the key for the OLD player if it was P2
+        if (currentPlayer == Player::PLAYER2) {
+            currentHashKey ^= Zobrist::sideToMoveKey;
+        }
+        // XOR in the key for the NEW player if it is P2
+        if (player == Player::PLAYER2) {
+            currentHashKey ^= Zobrist::sideToMoveKey;
+        }
+    }
+    currentPlayer = player; // Update the player state
 }
+
 
 void GameState::setHashKey(uint64_t key) {
     // Allows manually setting the hash key after loading board and player
@@ -369,23 +382,20 @@ bool GameState::setPieceAt(int r, int c, PieceType type, Player player) {
     if (player == Player::NONE) return false; // Must assign to a player
 
     // Rule Checks:
-    // 1. Cannot place in opponent's den
     Player opponent = (player == Player::PLAYER1) ? Player::PLAYER2 : Player::PLAYER1;
     if (isOwnDen(r, c, opponent)) {
          std::cerr << "Setup Error: Cannot place piece in opponent's den." << std::endl;
          return false;
     }
-    // 2. Cannot place non-rat in river
     if (isRiver(r, c) && type != PieceType::RAT) {
          std::cerr << "Setup Error: Only Rat can be placed in the river." << std::endl;
          return false;
     }
-    // 3. Check piece count limit (max 1 of each type per player)
     auto counts = countPieces(player);
     Piece existingPiece = board[r][c];
     // Allow placing over self, otherwise check count
     if (!(existingPiece.type == type && existingPiece.owner == player)) {
-        if (counts[type] >= 1) {
+        if (counts.count(type) && counts[type] >= 1) { // Check if key exists before accessing
             std::cerr << "Setup Error: Player " << static_cast<int>(player)
                       << " already has a " << static_cast<int>(type) << std::endl;
             return false;
@@ -416,14 +426,20 @@ void GameState::clearBoard() {
 // Recalculates the hash from the current board state and player
 void GameState::recalculateHash() {
     currentHashKey = Zobrist::calculateInitialHash(board, currentPlayer);
-    // std::cout << "Hash recalculated: " << currentHashKey << std::endl; // Debug
+    // Optional Debug: std::cout << "Hash recalculated: " << currentHashKey << std::endl;
 }
 
 // Basic validation for setup completion
 bool GameState::validateSetup() const {
      // Check if any piece is in opponent's den
-     if (isOwnDen(0, 3, Player::PLAYER1) && board[0][3].owner == Player::PLAYER2) return false;
-     if (isOwnDen(8, 3, Player::PLAYER2) && board[8][3].owner == Player::PLAYER1) return false;
+     if (getPiece(0, 3).owner == Player::PLAYER2) {
+         std::cerr << "Setup Error: Player 2 piece in Player 1 den." << std::endl;
+         return false;
+     }
+     if (getPiece(8, 3).owner == Player::PLAYER1) {
+          std::cerr << "Setup Error: Player 1 piece in Player 2 den." << std::endl;
+          return false;
+     }
 
      // Could add more checks (e.g., exactly 8 pieces per side if desired)
      auto p1counts = countPieces(Player::PLAYER1);
@@ -434,6 +450,9 @@ bool GameState::validateSetup() const {
          std::cerr << "Setup Error: Each player must have at least one piece." << std::endl;
          return false; // Must have some pieces
      }
+     // Add check for max 1 piece of each type per player
+     for(auto const& [key, val] : p1counts) if (val > 1) { std::cerr << "Setup Error: Player 1 has >1 of piece type " << (int)key << std::endl; return false; }
+     for(auto const& [key, val] : p2counts) if (val > 1) { std::cerr << "Setup Error: Player 2 has >1 of piece type " << (int)key << std::endl; return false; }
 
      return true;
 }

@@ -9,21 +9,18 @@
 class Graphics {
 public:
     // --- Constants ---
-    // Keep integral constants here if needed, or move all for consistency
     static const int SQUARE_SIZE = 60;
     static const int BOARD_OFFSET_X = 50;
     static const int BOARD_OFFSET_Y = 50;
     static const int UI_PANEL_X = BOARD_OFFSET_X + BOARD_COLS * SQUARE_SIZE + 20;
     static const int UI_PANEL_WIDTH = 250;
-    static const int UI_BUTTON_WIDTH = 60;
+    static const int UI_BUTTON_WIDTH = 140; // Keep wider buttons
     static const int UI_BUTTON_HEIGHT = 30;
     static const int UI_BUTTON_PADDING = 10;
 
-    //vvv MODIFIED vvv --- Declare static const floats (no initialization) --- vvv
     static const float INDICATOR_RADIUS;
     static const float INDICATOR_X;
     static const float INDICATOR_Y;
-    //^^^ MODIFIED ^^^-------------------------------------------------------^^^
 
 
     // --- Constructor & Asset Loading ---
@@ -36,7 +33,7 @@ public:
                    AppMode currentMode,
                    Player setupPlayer,
                    PieceType selectedSetupPiece,
-                   bool gameOver, // Needed to hide indicator when game ends
+                   bool gameOver,
                    const std::vector<Move>& legalMoveHighlights,
                    int selectedRow, int selectedCol,
                    const Move& lastAiMove);
@@ -44,10 +41,17 @@ public:
 
     // --- Utility Functions ---
     sf::Vector2i getClickedSquare(const sf::Vector2i& mousePos) const;
+    // Setup UI Click Detectors
     PieceType getClickedSetupPieceButton(const sf::Vector2i& mousePos) const;
     bool isClickOnClearButton(const sf::Vector2i& mousePos) const;
     bool isClickOnSideButton(const sf::Vector2i& mousePos) const;
     bool isClickOnFinishButton(const sf::Vector2i& mousePos) const;
+    // Book Editor UI Click Detectors
+    bool isClickOnSaveLineButton(const sf::Vector2i& mousePos) const;
+    bool isClickOnResetBoardButton(const sf::Vector2i& mousePos) const;
+    bool isClickOnExitEditorButton(const sf::Vector2i& mousePos) const;
+    // <<< NEW: Editor Undo Button >>>
+    bool isClickOnUndoEditorButton(const sf::Vector2i& mousePos) const;
 
 
     // --- Method to toggle display mode ---
@@ -59,15 +63,25 @@ private:
     // --- Private Members ---
     sf::Font font;
     int pieceDisplayMode = 0;
-    bool boardFlipped = true; // Default: P1 (Blue) at bottom (visually)
+    bool boardFlipped = true;
 
     // UI Element Storage
     struct ButtonUI { sf::RectangleShape shape; sf::Text label; sf::FloatRect bounds; };
+    // Setup UI
     std::map<PieceType, ButtonUI> pieceButtons;
     ButtonUI clearButton; ButtonUI sideButton; ButtonUI finishButton;
+    // Game UI
     sf::CircleShape turnIndicatorDot;
+    // Book Editor UI
+    ButtonUI saveLineButton;
+    ButtonUI resetBoardButton;
+    ButtonUI exitEditorButton;
+    // <<< NEW: Editor Undo Button >>>
+    ButtonUI undoEditorButton;
+
 
     // --- Private Helper Functions ---
+    void setupButton(ButtonUI& button, const std::string& text, float x, float y, float width, float height);
     void setupUIElements();
     sf::Vector2f getScreenPos(int r, int c) const;
     void drawGrid(sf::RenderWindow& window, const GameState& gameState);
@@ -78,6 +92,7 @@ private:
                         const Move& lastAiMove);
     void drawSetupUI(sf::RenderWindow& window, Player setupPlayer, PieceType selectedSetupPiece);
     void drawTurnIndicator(sf::RenderWindow& window, const GameState& gameState);
+    void drawBookEditorUI(sf::RenderWindow& window);
 };
 
 

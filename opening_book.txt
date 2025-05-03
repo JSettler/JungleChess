@@ -1,0 +1,7 @@
+# Jungle Chess Opening Book
+
+a3a4 g7g6 a4a5 g6g5 g3f3
+a3a4 a7b7 a4a5 a9a8 a1a2 g7g6 g3f3
+
+a3a4 g7g6 a4a5 g6g5
+a3a4 a7b7 a4a5 a9a8

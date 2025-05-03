@@ -14,6 +14,8 @@ public:
 
     // --- Core Game Actions & Information ---
     Piece getPiece(int row, int col) const;
+    // <<< NEW: Public getter for the board >>>
+    const std::vector<std::vector<Piece>>& getBoard() const;
     bool isMoveLegal(const Move& move, Player player) const;
     void applyMove(const Move& move);
     std::vector<Move> getAllLegalMoves(Player player) const;
@@ -30,37 +32,29 @@ public:
     bool isRiver(int r, int c) const;
     bool isOwnTrap(int r, int c, Player player) const;
     bool isOwnDen(int r, int c, Player player) const;
-    int getRank(PieceType type) const; // Now public
+    int getRank(PieceType type) const;
 
     // --- Setters needed for loading state ---
     void setBoard(const std::vector<std::vector<Piece>>& newBoard);
     void setCurrentPlayer(Player player);
     void setHashKey(uint64_t key);
 
-    //vvv NEW vvv --- Methods for Setup Mode --- vvv
-    // Places a piece if valid (checks count, location rules), returns true on success
+    // --- Methods for Setup Mode ---
     bool setPieceAt(int r, int c, PieceType type, Player player);
-    // Removes piece at location
     void clearSquare(int r, int c);
-    // Removes all pieces
     void clearBoard();
-    // Recalculates the hash from the current board state and player
     void recalculateHash();
-    // Counts pieces for validation
     std::map<PieceType, int> countPieces(Player player) const;
-    // Basic validation for setup completion (e.g., no pieces in opponent den)
     bool validateSetup() const;
-    //^^^ NEW ^^^------------------------------^^^
 
 
 private:
     // --- Internal State ---
-    std::vector<std::vector<Piece>> board;
+    std::vector<std::vector<Piece>> board; // <<< Still private
     Player currentPlayer;
     uint64_t currentHashKey;
 
     // --- Private Helper Functions ---
-    // int getRank(PieceType type) const; // Moved to public
     bool canCapture(const Piece& attacker, const Piece& defender, int defenderRow, int defenderCol) const;
     void updateHashForPieceChange(PieceType type, Player player, int r, int c);
 };
