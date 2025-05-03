@@ -123,7 +123,7 @@ namespace Evaluation {
 
     // --- Evaluation Weights ---
     const int MATERIAL_WEIGHT_MULTIPLIER = 2;
-    const int MOBILITY_WEIGHT = 5;
+    const int MOBILITY_WEIGHT = 5; // Still defined, just not used in evaluateBoard below
     const int LION_PROXIMITY_WEIGHT = 40; // Specific bonus for AI Lion near opponent den (redundant now? Keep for now)
     const int ELEPHANT_TRAP_PENALTY = 3000;
     const int ELEPHANT_EDGE_THRESHOLD = 1;
@@ -246,10 +246,10 @@ namespace Evaluation {
             }
         }
 
-        // --- Mobility Score ---
-        int aiMoves = gameState.getAllLegalMoves(Player::PLAYER2).size();
-        int humanMoves = gameState.getAllLegalMoves(Player::PLAYER1).size();
-        int mobilityScore = MOBILITY_WEIGHT * (aiMoves - humanMoves);
+        // --- Mobility Score (COMMENTED OUT FOR PERFORMANCE) ---
+        // int aiMoves = gameState.getAllLegalMoves(Player::PLAYER2).size();
+        // int humanMoves = gameState.getAllLegalMoves(Player::PLAYER1).size();
+        // int mobilityScore = MOBILITY_WEIGHT * (aiMoves - humanMoves);
 
         // --- Elephant Trap Penalty Calculation ---
         if (aiElephantRow != -1 && humanRatRow != -1) { /* ... elephant trap logic ... */ }
@@ -262,7 +262,7 @@ namespace Evaluation {
         // --- Combine Scores ---
         return (materialScore * MATERIAL_WEIGHT_MULTIPLIER)
                + positionalScorePST // Now includes separate L/T values
-               + mobilityScore
+               // + mobilityScore // COMMENTED OUT FOR PERFORMANCE
                // + lionProximityScore // Maybe remove this now PSTs are stronger? Keep for now.
                + elephantTrapPenalty
                + trappedPieceMalus

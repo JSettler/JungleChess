@@ -25,7 +25,7 @@ Contains an alpha-beta searcher with move-ordering, piece-square-tables, transpo
 
 [escape] : Quit after confirmation
 
-[S] : save complete game to program directory (probably "../JungleChess/build")
+[S] : save complete game to program directory (probably "../JungleChess/build/" or "../JungleChess/")
 
 [L] : load saved game from program directory (if exists)
 
