@@ -14,7 +14,7 @@ public:
     static const int BOARD_OFFSET_Y = 50;
     static const int UI_PANEL_X = BOARD_OFFSET_X + BOARD_COLS * SQUARE_SIZE + 20;
     static const int UI_PANEL_WIDTH = 250;
-    static const int UI_BUTTON_WIDTH = 140; // Keep wider buttons
+    static const int UI_BUTTON_WIDTH = 140; // Keep wider buttons for consistency? Or adjust? Let's keep 140 for now.
     static const int UI_BUTTON_HEIGHT = 30;
     static const int UI_BUTTON_PADDING = 10;
 
@@ -34,9 +34,17 @@ public:
                    Player setupPlayer,
                    PieceType selectedSetupPiece,
                    bool gameOver,
+                   // Highlighting data:
                    const std::vector<Move>& legalMoveHighlights,
                    int selectedRow, int selectedCol,
-                   const Move& lastAiMove);
+                   const Move& lastAiMove,
+                   // Book Editor Highlights
+                   const std::vector<sf::Vector2i>& bookStartingSquares,
+                   const std::vector<sf::Vector2i>& bookTargetSquares,
+                   // <<< NEW: State for Game UI >>>
+                   bool isBookEnabled,
+                   int currentSearchDepth
+                  );
 
 
     // --- Utility Functions ---
@@ -50,8 +58,10 @@ public:
     bool isClickOnSaveLineButton(const sf::Vector2i& mousePos) const;
     bool isClickOnResetBoardButton(const sf::Vector2i& mousePos) const;
     bool isClickOnExitEditorButton(const sf::Vector2i& mousePos) const;
-    // <<< NEW: Editor Undo Button >>>
     bool isClickOnUndoEditorButton(const sf::Vector2i& mousePos) const;
+    // <<< NEW: Game UI Click Detectors >>>
+    bool isClickOnBookToggleButton(const sf::Vector2i& mousePos) const;
+    bool isClickOnDepthAdjustButton(const sf::Vector2i& mousePos) const;
 
 
     // --- Method to toggle display mode ---
@@ -72,11 +82,13 @@ private:
     ButtonUI clearButton; ButtonUI sideButton; ButtonUI finishButton;
     // Game UI
     sf::CircleShape turnIndicatorDot;
+    // <<< NEW: Game Mode Buttons >>>
+    ButtonUI bookToggleButton;
+    ButtonUI depthAdjustButton;
     // Book Editor UI
     ButtonUI saveLineButton;
     ButtonUI resetBoardButton;
     ButtonUI exitEditorButton;
-    // <<< NEW: Editor Undo Button >>>
     ButtonUI undoEditorButton;
 
 
@@ -87,12 +99,18 @@ private:
     void drawGrid(sf::RenderWindow& window, const GameState& gameState);
     void drawPieces(sf::RenderWindow& window, const GameState& gameState);
     void drawHighlights(sf::RenderWindow& window,
+                        AppMode currentMode, // Need mode to decide which highlights to draw
                         const std::vector<Move>& legalMoveHighlights,
                         int selectedRow, int selectedCol,
-                        const Move& lastAiMove);
+                        const Move& lastAiMove,
+                        const std::vector<sf::Vector2i>& bookStartingSquares,
+                        const std::vector<sf::Vector2i>& bookTargetSquares
+                       );
     void drawSetupUI(sf::RenderWindow& window, Player setupPlayer, PieceType selectedSetupPiece);
     void drawTurnIndicator(sf::RenderWindow& window, const GameState& gameState);
     void drawBookEditorUI(sf::RenderWindow& window);
+    // <<< NEW: Draw Game UI >>>
+    void drawGameUI(sf::RenderWindow& window, bool isBookEnabled, int currentSearchDepth);
 };
 
 

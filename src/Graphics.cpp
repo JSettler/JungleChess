@@ -6,6 +6,7 @@
 #include <vector>
 #include <map>
 #include <cmath> // For std::floor
+#include <set>   // Required by drawHighlights logic (optional optimization)
 
 // Define and initialize static const floats
 const float Graphics::INDICATOR_RADIUS = 10.0f;
@@ -29,6 +30,12 @@ namespace NightColors {
     const sf::Color LastAiOutline = sf::Color(255, 0, 0, 200);
     const sf::Color ButtonFill = sf::Color(80, 80, 90);
     const sf::Color ButtonText = sf::Color::White;
+    // Book highlight colors
+    const sf::Color BookBorder = sf::Color(0, 200, 0, 220); // Brighter green border
+    const sf::Color BookTargetFill = sf::Color(0, 220, 0, 120); // Brighter green fill
+    // Game UI button colors (optional)
+    const sf::Color BookButtonOn = sf::Color(50, 150, 50);
+    const sf::Color BookButtonOff = sf::Color(150, 50, 50);
 }
 
 
@@ -66,13 +73,15 @@ void Graphics::setupButton(ButtonUI& button, const std::string& text, float x, f
     // Use the member font 'this->font' (or just 'font')
     // Check if the member font is valid before using it
     if (this->font.getInfo().family.empty()) {
-         std::cerr << "Error in setupButton: Font not loaded or invalid." << std::endl;
+         // Don't print error repeatedly if font load failed initially
+         // std::cerr << "Error in setupButton: Font not loaded or invalid." << std::endl;
+         button.bounds = sf::FloatRect(0,0,0,0); // Ensure bounds are zeroed if setup fails
          return; // Don't setup if font is invalid
     }
 
     button.shape.setSize(sf::Vector2f(width, height));
     button.shape.setPosition(x, y);
-    button.shape.setFillColor(NightColors::ButtonFill);
+    button.shape.setFillColor(NightColors::ButtonFill); // Default fill
     button.label.setFont(this->font); // Use member font
     button.label.setString(text);
     button.label.setCharacterSize(16);
@@ -87,75 +96,67 @@ void Graphics::setupButton(ButtonUI& button, const std::string& text, float x, f
 
 // Helper to create UI buttons
 void Graphics::setupUIElements() {
-    // Check if font is loaded before proceeding
     if (font.getInfo().family.empty()) {
-        // Try loading again just in case it wasn't attempted/failed in constructor/loadAssets
         if (!font.loadFromFile("assets/arial.ttf")) {
              std::cerr << "Critical Error: Cannot set up UI elements without font." << std::endl;
-             return; // Cannot proceed without font
+             return;
         }
-         // Check again after attempting load
         if (font.getInfo().family.empty()) {
              std::cerr << "Critical Error: Font loading failed in setupUIElements." << std::endl;
              return;
         }
     }
 
+    // Determine Panel X based on potentially flipped board offset?
+    // For now, assume UI panel is always on the right relative to the window.
+    const float panelX = BOARD_OFFSET_X + BOARD_COLS * SQUARE_SIZE + 20;
+    const float panelWidth = UI_PANEL_WIDTH; // Use constant defined in header
+
     // --- Setup Mode UI ---
     float currentY_setup = BOARD_OFFSET_Y;
-    // Use a specific, potentially smaller width for these buttons if desired
-    const float setupModeButtonWidth = 100.0f;
-    setupButton(clearButton, "Clear", UI_PANEL_X, currentY_setup, setupModeButtonWidth, UI_BUTTON_HEIGHT);
-
-    // Side button setup
+    const float setupModeButtonWidth = 100.0f; // Specific width for setup buttons
+    setupButton(clearButton, "Clear", panelX, currentY_setup, setupModeButtonWidth, UI_BUTTON_HEIGHT);
     sideButton.shape.setSize(sf::Vector2f(setupModeButtonWidth, UI_BUTTON_HEIGHT));
-    sideButton.shape.setPosition(UI_PANEL_X + setupModeButtonWidth + UI_BUTTON_PADDING, currentY_setup);
-    sideButton.label.setFont(font); // Use member font
-    sideButton.label.setCharacterSize(16);
-    sideButton.label.setFillColor(NightColors::ButtonText);
-    // Bounds need to be updated when position/size changes
+    sideButton.shape.setPosition(panelX + setupModeButtonWidth + UI_BUTTON_PADDING, currentY_setup);
+    sideButton.label.setFont(font); sideButton.label.setCharacterSize(16); sideButton.label.setFillColor(NightColors::ButtonText);
     sideButton.bounds = sideButton.shape.getGlobalBounds();
-
     currentY_setup += UI_BUTTON_HEIGHT + UI_BUTTON_PADDING * 2;
-
-    // Piece buttons
-    PieceType pieceOrder[] = { PieceType::RAT, PieceType::CAT, PieceType::DOG, PieceType::WOLF,
-                              PieceType::LEOPARD, PieceType::TIGER, PieceType::LION, PieceType::ELEPHANT };
-    int buttonsPerRow = 2;
-    // Calculate width dynamically based on panel width and padding
-    float pieceButtonWidth = (UI_PANEL_WIDTH - UI_BUTTON_PADDING * (buttonsPerRow -1) - 30) / buttonsPerRow;
-    int currentX_setup = UI_PANEL_X;
+    PieceType pieceOrder[] = { PieceType::RAT, PieceType::CAT, PieceType::DOG, PieceType::WOLF, PieceType::LEOPARD, PieceType::TIGER, PieceType::LION, PieceType::ELEPHANT };
+    int buttonsPerRow = 2; float pieceButtonWidth = (panelWidth - UI_BUTTON_PADDING * (buttonsPerRow -1) - 30) / buttonsPerRow;
+    int currentX_setup = panelX;
     for (int i = 0; i < 8; ++i) {
-        PieceType type = pieceOrder[i];
-        ButtonUI& btn = pieceButtons[type];
+        PieceType type = pieceOrder[i]; ButtonUI& btn = pieceButtons[type];
         setupButton(btn, std::to_string(GameState().getRank(type)), currentX_setup, currentY_setup, pieceButtonWidth, UI_BUTTON_HEIGHT);
-        btn.label.setFillColor(sf::Color::Black); // Black text for piece buttons
-
-        if ((i + 1) % buttonsPerRow == 0) { currentX_setup = UI_PANEL_X; currentY_setup += UI_BUTTON_HEIGHT + UI_BUTTON_PADDING; }
+        btn.label.setFillColor(sf::Color::Black);
+        if ((i + 1) % buttonsPerRow == 0) { currentX_setup = panelX; currentY_setup += UI_BUTTON_HEIGHT + UI_BUTTON_PADDING; }
         else { currentX_setup += pieceButtonWidth + UI_BUTTON_PADDING; }
     }
-    // Adjust Y pos if the last row wasn't full
     if (8 % buttonsPerRow != 0) { currentY_setup += UI_BUTTON_HEIGHT + UI_BUTTON_PADDING; }
-    currentY_setup += UI_BUTTON_PADDING; // Extra padding before finish button
-
-    // Finish button (wider)
-    setupButton(finishButton, "Finish (F)", UI_PANEL_X, currentY_setup, UI_PANEL_WIDTH - 30, UI_BUTTON_HEIGHT);
-    finishButton.shape.setFillColor(sf::Color(50, 150, 50)); // Green color
+    currentY_setup += UI_BUTTON_PADDING;
+    setupButton(finishButton, "Finish (F)", panelX, currentY_setup, panelWidth - 30, UI_BUTTON_HEIGHT);
+    finishButton.shape.setFillColor(sf::Color(50, 150, 50));
 
 
     // --- Book Editor UI ---
-    // Start editor buttons lower down or adjust layout as needed
-    float currentY_editor = BOARD_OFFSET_Y; // Start from top for editor UI
-    setupButton(saveLineButton, "Save Line", UI_PANEL_X, currentY_editor, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
+    float currentY_editor = BOARD_OFFSET_Y; // Start editor UI from top
+    setupButton(saveLineButton, "Save Line", panelX, currentY_editor, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
     currentY_editor += UI_BUTTON_HEIGHT + UI_BUTTON_PADDING;
-    setupButton(resetBoardButton, "Reset Board", UI_PANEL_X, currentY_editor, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
+    setupButton(resetBoardButton, "Reset Board", panelX, currentY_editor, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
     currentY_editor += UI_BUTTON_HEIGHT + UI_BUTTON_PADDING;
-    // <<< NEW: Setup Undo Button >>>
-    setupButton(undoEditorButton, "Undo Move", UI_PANEL_X, currentY_editor, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
+    setupButton(undoEditorButton, "Undo Move", panelX, currentY_editor, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
     currentY_editor += UI_BUTTON_HEIGHT + UI_BUTTON_PADDING;
-    // ---
-    setupButton(exitEditorButton, "Exit Editor", UI_PANEL_X, currentY_editor, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
-    exitEditorButton.shape.setFillColor(sf::Color(150, 50, 50)); // Red-ish color
+    setupButton(exitEditorButton, "Exit Editor", panelX, currentY_editor, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
+    exitEditorButton.shape.setFillColor(sf::Color(150, 50, 50));
+
+
+    // --- Game Mode UI ---
+    float currentY_game = BOARD_OFFSET_Y; // Start from top for game UI buttons too
+    // Book toggle button - text/color set dynamically
+    setupButton(bookToggleButton, "Book ?", panelX, currentY_game, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
+    currentY_game += UI_BUTTON_HEIGHT + UI_BUTTON_PADDING;
+    // Depth adjust button - text set dynamically
+    setupButton(depthAdjustButton, "Depth ?", panelX, currentY_game, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
+
 }
 
 
@@ -163,105 +164,70 @@ void Graphics::setupUIElements() {
 sf::Vector2i Graphics::getClickedSquare(const sf::Vector2i& mousePos) const {
     float relativeX = static_cast<float>(mousePos.x) - BOARD_OFFSET_X;
     float relativeY = static_cast<float>(mousePos.y) - BOARD_OFFSET_Y;
-
-    if (relativeX < 0 || relativeY < 0 ||
-        relativeX >= BOARD_COLS * SQUARE_SIZE || relativeY >= BOARD_ROWS * SQUARE_SIZE) {
-        return sf::Vector2i(-1, -1); // Click outside board bounds
+    if (relativeX < 0 || relativeY < 0 || relativeX >= BOARD_COLS * SQUARE_SIZE || relativeY >= BOARD_ROWS * SQUARE_SIZE) {
+        return sf::Vector2i(-1, -1);
     }
-
-    // Calculate apparent row/col based on screen position
     int apparentCol = static_cast<int>(std::floor(relativeX / SQUARE_SIZE));
     int apparentRow = static_cast<int>(std::floor(relativeY / SQUARE_SIZE));
-
     if (boardFlipped) {
-        // If board is flipped, translate apparent coords back to internal coords
-        int internalRow = BOARD_ROWS - 1 - apparentRow;
-        int internalCol = BOARD_COLS - 1 - apparentCol;
+        int internalRow = BOARD_ROWS - 1 - apparentRow; int internalCol = BOARD_COLS - 1 - apparentCol;
         return sf::Vector2i(internalCol, internalRow);
     } else {
-        // If not flipped, apparent coords are internal coords
         return sf::Vector2i(apparentCol, apparentRow);
     }
 }
 
 
-// Click detection for UI buttons
+// --- Click detection for UI buttons ---
 PieceType Graphics::getClickedSetupPieceButton(const sf::Vector2i& mousePos) const {
-     for (const auto& pair : pieceButtons) {
-        // Check if the bounds actually exist before checking contains
-        if (pair.second.bounds.width > 0 && pair.second.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y))) {
-            return pair.first;
-        }
-    }
-    return PieceType::EMPTY;
-}
+    for (const auto& pair : pieceButtons) { if (pair.second.bounds.width > 0 && pair.second.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y))) return pair.first; } return PieceType::EMPTY; }
+bool Graphics::isClickOnClearButton(const sf::Vector2i& mousePos) const { return clearButton.bounds.width > 0 && clearButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y)); }
+bool Graphics::isClickOnSideButton(const sf::Vector2i& mousePos) const { return sideButton.bounds.width > 0 && sideButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y)); }
+bool Graphics::isClickOnFinishButton(const sf::Vector2i& mousePos) const { return finishButton.bounds.width > 0 && finishButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y)); }
+bool Graphics::isClickOnSaveLineButton(const sf::Vector2i& mousePos) const { return saveLineButton.bounds.width > 0 && saveLineButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y)); }
+bool Graphics::isClickOnResetBoardButton(const sf::Vector2i& mousePos) const { return resetBoardButton.bounds.width > 0 && resetBoardButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y)); }
+bool Graphics::isClickOnExitEditorButton(const sf::Vector2i& mousePos) const { return exitEditorButton.bounds.width > 0 && exitEditorButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y)); }
+bool Graphics::isClickOnUndoEditorButton(const sf::Vector2i& mousePos) const { return undoEditorButton.bounds.width > 0 && undoEditorButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y)); }
 
-bool Graphics::isClickOnClearButton(const sf::Vector2i& mousePos) const {
-    return clearButton.bounds.width > 0 && clearButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
+// <<< NEW: Game UI Click Detectors >>>
+bool Graphics::isClickOnBookToggleButton(const sf::Vector2i& mousePos) const {
+    return bookToggleButton.bounds.width > 0 && bookToggleButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
 }
-
-bool Graphics::isClickOnSideButton(const sf::Vector2i& mousePos) const {
-    return sideButton.bounds.width > 0 && sideButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-}
-
-bool Graphics::isClickOnFinishButton(const sf::Vector2i& mousePos) const {
-    return finishButton.bounds.width > 0 && finishButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-}
-
-// Book Editor UI Click Detectors
-bool Graphics::isClickOnSaveLineButton(const sf::Vector2i& mousePos) const {
-    return saveLineButton.bounds.width > 0 && saveLineButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-}
-bool Graphics::isClickOnResetBoardButton(const sf::Vector2i& mousePos) const {
-    return resetBoardButton.bounds.width > 0 && resetBoardButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-}
-bool Graphics::isClickOnExitEditorButton(const sf::Vector2i& mousePos) const {
-    return exitEditorButton.bounds.width > 0 && exitEditorButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-}
-// <<< NEW: Editor Undo Button Click Detector >>>
-bool Graphics::isClickOnUndoEditorButton(const sf::Vector2i& mousePos) const {
-    return undoEditorButton.bounds.width > 0 && undoEditorButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
+bool Graphics::isClickOnDepthAdjustButton(const sf::Vector2i& mousePos) const {
+    return depthAdjustButton.bounds.width > 0 && depthAdjustButton.bounds.contains(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
 }
 
 
 // Toggle display implementation
-void Graphics::togglePieceDisplay() {
-    pieceDisplayMode = (pieceDisplayMode + 1) % 3;
-    // Suppress console output for toggles to avoid clutter
-}
-
+void Graphics::togglePieceDisplay() { pieceDisplayMode = (pieceDisplayMode + 1) % 3; }
 // Toggle board flip implementation
-void Graphics::toggleBoardFlip() {
-    boardFlipped = !boardFlipped;
-    // Suppress console output for toggles
-}
-
+void Graphics::toggleBoardFlip() { boardFlipped = !boardFlipped; }
 // Helper to get screen position based on flip
 sf::Vector2f Graphics::getScreenPos(int r, int c) const {
-    int displayRow = r;
-    int displayCol = c;
-    if (boardFlipped) {
-        displayRow = BOARD_ROWS - 1 - r;
-        displayCol = BOARD_COLS - 1 - c;
-    }
-    return sf::Vector2f(BOARD_OFFSET_X + displayCol * SQUARE_SIZE,
-                        BOARD_OFFSET_Y + displayRow * SQUARE_SIZE);
+    int displayRow = r; int displayCol = c;
+    if (boardFlipped) { displayRow = BOARD_ROWS - 1 - r; displayCol = BOARD_COLS - 1 - c; }
+    return sf::Vector2f(BOARD_OFFSET_X + displayCol * SQUARE_SIZE, BOARD_OFFSET_Y + displayRow * SQUARE_SIZE);
 }
 
 
-// Main drawing function
+// Main drawing function - UPDATED
 void Graphics::drawBoard(sf::RenderWindow& window,
                          const GameState& gameState,
-                         AppMode currentMode, // Pass mode
+                         AppMode currentMode,
                          Player setupPlayer,
                          PieceType selectedSetupPiece,
                          bool gameOver,
                          const std::vector<Move>& legalMoveHighlights,
                          int selectedRow, int selectedCol,
-                         const Move& lastAiMove) {
+                         const Move& lastAiMove,
+                         const std::vector<sf::Vector2i>& bookStartingSquares,
+                         const std::vector<sf::Vector2i>& bookTargetSquares,
+                         // <<< NEW: Pass Game UI state >>>
+                         bool isBookEnabled,
+                         int currentSearchDepth
+                        ) {
     window.clear(NightColors::Background);
 
-    // Draw indicator (only in game/book mode, not game over)
     if ((currentMode == AppMode::GAME || currentMode == AppMode::BOOK_EDITOR) && !gameOver) {
          drawTurnIndicator(window, gameState);
     }
@@ -272,12 +238,16 @@ void Graphics::drawBoard(sf::RenderWindow& window,
     // Draw UI based on mode
     if (currentMode == AppMode::SETUP) {
         drawSetupUI(window, setupPlayer, selectedSetupPiece);
+        // No highlights needed in setup mode usually
     } else if (currentMode == AppMode::BOOK_EDITOR) {
         drawBookEditorUI(window); // Draw book editor UI
-        // Also draw highlights in editor mode to show selection/moves
-        drawHighlights(window, legalMoveHighlights, selectedRow, selectedCol, {-1,-1,-1,-1}); // No last AI move highlight
+        // <<< Pass book data to drawHighlights >>>
+        drawHighlights(window, currentMode, legalMoveHighlights, selectedRow, selectedCol, {-1,-1,-1,-1}, bookStartingSquares, bookTargetSquares);
     } else { // GAME mode
-        drawHighlights(window, legalMoveHighlights, selectedRow, selectedCol, lastAiMove);
+        // <<< NEW: Draw Game UI >>>
+        drawGameUI(window, isBookEnabled, currentSearchDepth);
+        // <<< Pass empty book data to drawHighlights >>>
+        drawHighlights(window, currentMode, legalMoveHighlights, selectedRow, selectedCol, lastAiMove, {}, {});
     }
 }
 
@@ -362,49 +332,56 @@ void Graphics::drawPieces(sf::RenderWindow& window, const GameState& gameState) 
 }
 
 
-// Draw highlights
+// Draw highlights - MODIFIED
 void Graphics::drawHighlights(sf::RenderWindow& window,
-                              const std::vector<Move>& legalMoveHighlights,
-                              int selectedRow, int selectedCol, // These are internal board coords
-                              const Move& lastAiMove)           // This contains internal board coords
+                              AppMode currentMode, // Need mode
+                              const std::vector<Move>& legalMoveHighlights, // Normal legal moves (used in Game, potentially Editor)
+                              int selectedRow, int selectedCol,             // Currently selected piece
+                              const Move& lastAiMove,                       // Last AI move (Game mode only)
+                              const std::vector<sf::Vector2i>& bookStartingSquares, // Pieces with book moves (Editor mode)
+                              const std::vector<sf::Vector2i>& bookTargetSquares    // Target squares for selected piece (Editor mode)
+                             )
 {
     sf::RectangleShape highlightShape(sf::Vector2f(SQUARE_SIZE, SQUARE_SIZE));
+    const float borderThickness = 3.0f;
 
-    // 1. Highlight Last AI Move (Use internal coords with getScreenPos)
-    //    Only draw if no piece is currently selected by the user.
-    if (selectedRow == -1 && lastAiMove.fromRow != -1) {
-         highlightShape.setFillColor(sf::Color::Transparent);
-         highlightShape.setOutlineColor(NightColors::LastAiOutline);
-         highlightShape.setOutlineThickness(3.0f);
-         highlightShape.setPosition(getScreenPos(lastAiMove.fromRow, lastAiMove.fromCol));
-         window.draw(highlightShape);
-         highlightShape.setPosition(getScreenPos(lastAiMove.toRow, lastAiMove.toCol));
-         window.draw(highlightShape);
-    }
-
-    // 2. Highlight Selected Piece (Use internal coords with getScreenPos)
+    // --- Common Highlights (Selected Piece) ---
     if (selectedRow != -1 && selectedCol != -1) {
         highlightShape.setPosition(getScreenPos(selectedRow, selectedCol));
         highlightShape.setFillColor(sf::Color::Transparent);
         highlightShape.setOutlineColor(NightColors::SelectedOutline);
-        highlightShape.setOutlineThickness(3.0f);
+        highlightShape.setOutlineThickness(borderThickness);
         window.draw(highlightShape);
     }
 
-    // 3. Highlight Legal Moves (Use internal coords with getScreenPos)
-    highlightShape.setFillColor(NightColors::LegalMoveFill);
-    highlightShape.setOutlineThickness(0); // No outline for fill highlights
-    for (const auto& move : legalMoveHighlights) {
-        highlightShape.setPosition(getScreenPos(move.toRow, move.toCol));
-        window.draw(highlightShape);
+    // --- Mode-Specific Highlights ---
+    if (currentMode == AppMode::GAME) {
+        // Highlight Last AI Move (Only if no piece is selected)
+        if (selectedRow == -1 && lastAiMove.fromRow != -1) {
+             highlightShape.setFillColor(sf::Color::Transparent); highlightShape.setOutlineColor(NightColors::LastAiOutline); highlightShape.setOutlineThickness(borderThickness);
+             highlightShape.setPosition(getScreenPos(lastAiMove.fromRow, lastAiMove.fromCol)); window.draw(highlightShape);
+             highlightShape.setPosition(getScreenPos(lastAiMove.toRow, lastAiMove.toCol)); window.draw(highlightShape);
+        }
+        // Highlight Normal Legal Moves
+        highlightShape.setFillColor(NightColors::LegalMoveFill); highlightShape.setOutlineThickness(0);
+        for (const auto& move : legalMoveHighlights) { highlightShape.setPosition(getScreenPos(move.toRow, move.toCol)); window.draw(highlightShape); }
+    } else if (currentMode == AppMode::BOOK_EDITOR) {
+        if (selectedRow == -1) {
+            // No piece selected: Highlight pieces that have book moves available
+            highlightShape.setFillColor(sf::Color::Transparent); highlightShape.setOutlineColor(NightColors::BookBorder); highlightShape.setOutlineThickness(borderThickness);
+            for (const auto& pos : bookStartingSquares) { highlightShape.setPosition(getScreenPos(pos.y, pos.x)); window.draw(highlightShape); } // Use y for row, x for col
+        } else {
+            // Piece selected: Highlight book target squares for that piece
+            highlightShape.setFillColor(NightColors::BookTargetFill); highlightShape.setOutlineThickness(0);
+            for (const auto& pos : bookTargetSquares) { highlightShape.setPosition(getScreenPos(pos.y, pos.x)); window.draw(highlightShape); } // Use y for row, x for col
+        }
     }
 }
 
 
 // Draw Setup UI
 void Graphics::drawSetupUI(sf::RenderWindow& window, Player setupPlayer, PieceType selectedSetupPiece) {
-    // Check if buttons have been initialized (bounds width > 0)
-    if (clearButton.bounds.width <= 0) return; // Avoid drawing if UI not set up
+    if (clearButton.bounds.width <= 0) return; // Basic check if UI is initialized
 
     window.draw(clearButton.shape); window.draw(clearButton.label);
 
@@ -418,8 +395,8 @@ void Graphics::drawSetupUI(sf::RenderWindow& window, Player setupPlayer, PieceTy
 
     // Draw piece buttons with correct color and highlight
     for (auto const& [type, button] : pieceButtons) {
-         if (button.bounds.width <= 0) continue; // Skip if button invalid
-        sf::RectangleShape currentShape = button.shape; // Copy shape
+         if (button.bounds.width <= 0) continue;
+        sf::RectangleShape currentShape = button.shape;
         currentShape.setFillColor(setupPlayer == Player::PLAYER1 ? NightColors::P1_Piece : NightColors::P2_Piece);
         if (type == selectedSetupPiece) { currentShape.setOutlineColor(sf::Color::Yellow); currentShape.setOutlineThickness(3.0f); }
         else { currentShape.setOutlineThickness(0); }
@@ -433,29 +410,46 @@ void Graphics::drawSetupUI(sf::RenderWindow& window, Player setupPlayer, PieceTy
 // Draw Turn Indicator
 void Graphics::drawTurnIndicator(sf::RenderWindow& window, const GameState& gameState) {
     Player currentPlayer = gameState.getCurrentPlayer();
-    if (currentPlayer == Player::PLAYER1) {
-        turnIndicatorDot.setFillColor(NightColors::P1_Piece); // Blue dot
-    } else if (currentPlayer == Player::PLAYER2) {
-        turnIndicatorDot.setFillColor(NightColors::P2_Piece); // Orange/Red dot
-    } else {
-        turnIndicatorDot.setFillColor(sf::Color::Transparent); // Hide if no player
-    }
+    if (currentPlayer == Player::PLAYER1) turnIndicatorDot.setFillColor(NightColors::P1_Piece);
+    else if (currentPlayer == Player::PLAYER2) turnIndicatorDot.setFillColor(NightColors::P2_Piece);
+    else turnIndicatorDot.setFillColor(sf::Color::Transparent);
     window.draw(turnIndicatorDot);
 }
 
 // Draw Book Editor UI
 void Graphics::drawBookEditorUI(sf::RenderWindow& window) {
-    // Check if buttons have been initialized
-    if (saveLineButton.bounds.width <= 0 || resetBoardButton.bounds.width <= 0 || undoEditorButton.bounds.width <= 0 || exitEditorButton.bounds.width <= 0) {
-        // Maybe draw an error message if font failed?
-        return;
-    }
+    if (saveLineButton.bounds.width <= 0) return; // Basic check if UI is initialized
     window.draw(saveLineButton.shape); window.draw(saveLineButton.label);
     window.draw(resetBoardButton.shape); window.draw(resetBoardButton.label);
-    // <<< NEW: Draw Undo Button >>>
     window.draw(undoEditorButton.shape); window.draw(undoEditorButton.label);
-    // ---
     window.draw(exitEditorButton.shape); window.draw(exitEditorButton.label);
+}
+
+// <<< NEW: Draw Game UI >>>
+void Graphics::drawGameUI(sf::RenderWindow& window, bool isBookEnabled, int currentSearchDepth) {
+    // Check if buttons have been initialized
+    if (bookToggleButton.bounds.width <= 0 || depthAdjustButton.bounds.width <= 0 || font.getInfo().family.empty()) {
+        return; // Avoid drawing if UI not set up or font missing
+    }
+
+    // --- Draw Book Toggle Button ---
+    bookToggleButton.label.setString(isBookEnabled ? "Book ON" : "Book OFF");
+    bookToggleButton.shape.setFillColor(isBookEnabled ? NightColors::BookButtonOn : NightColors::BookButtonOff);
+    sf::FloatRect bookBounds = bookToggleButton.label.getLocalBounds();
+    bookToggleButton.label.setOrigin(bookBounds.left + bookBounds.width / 2.0f, bookBounds.top + bookBounds.height / 2.0f);
+    bookToggleButton.label.setPosition(bookToggleButton.shape.getPosition().x + UI_BUTTON_WIDTH / 2.0f, bookToggleButton.shape.getPosition().y + UI_BUTTON_HEIGHT / 2.0f);
+    window.draw(bookToggleButton.shape);
+    window.draw(bookToggleButton.label);
+
+
+    // --- Draw Depth Adjust Button ---
+    depthAdjustButton.label.setString("Depth " + std::to_string(currentSearchDepth));
+    depthAdjustButton.shape.setFillColor(NightColors::ButtonFill); // Use default color
+    sf::FloatRect depthBounds = depthAdjustButton.label.getLocalBounds();
+    depthAdjustButton.label.setOrigin(depthBounds.left + depthBounds.width / 2.0f, depthBounds.top + depthBounds.height / 2.0f);
+    depthAdjustButton.label.setPosition(depthAdjustButton.shape.getPosition().x + UI_BUTTON_WIDTH / 2.0f, depthAdjustButton.shape.getPosition().y + UI_BUTTON_HEIGHT / 2.0f);
+    window.draw(depthAdjustButton.shape);
+    window.draw(depthAdjustButton.label);
 }
 
 
