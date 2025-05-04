@@ -85,6 +85,10 @@ Now with alternate piece-sets, this is now the default :
 Setup-mode added:
 ![Jungle board](https://github.com/JSettler/JungleChess/blob/master/jungle_setup-mode.png)
 
+features added:
+![Jungle board](https://github.com/JSettler/JungleChess/blob/master/new_features.png)
+
+
 -----
 
 social media:
